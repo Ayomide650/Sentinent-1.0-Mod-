@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'messageReactionAdd',
   async execute(reaction, user) {
@@ -6,4 +5,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
