@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'error',
   execute(error) {
@@ -7,4 +6,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
