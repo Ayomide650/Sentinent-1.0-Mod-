@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'channelCreate',
   async execute(channel) {
@@ -6,4 +5,3 @@ module.exports = {
     console.log(`Channel created: ${channel.name} (ID: ${channel.id})`);
   }
 };
-```
