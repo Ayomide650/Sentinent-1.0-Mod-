@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'messageCreate',
   async execute(message, client) {
@@ -8,4 +7,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
