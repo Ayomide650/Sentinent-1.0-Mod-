@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'roleCreate',
   async execute(role) {
@@ -6,4 +5,3 @@ module.exports = {
     console.log(`Role Created: ${role.name} by ${role.guild.ownerId}`);
   }
 };
-```
