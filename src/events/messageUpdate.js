@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'messageUpdate',
   async execute(oldMessage, newMessage) {
@@ -7,4 +6,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
