@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'guildBanRemove',
   async execute(ban) {
@@ -6,4 +5,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
