@@ -36,6 +36,9 @@ module.exports = {
 };
 
 // Helper functions (implement these in your utils/db)
+function getUserLevelData(guildId, userId) {
+  // ...existing code or import from your database utils...
+}
 function getXpForLevel(level) {
   // Example: 50 * (1.05 ^ (level-1)) messages * avg 20 XP per message
   // Replace with your actual XP curve
@@ -46,9 +49,6 @@ function getXpForLevel(level) {
   }
   return xp;
 }
-    ctx.fillStyle = '#43b581';
-    ctx.fillRect(170, 120, 380 * progress, 24);
-
     // Rank position (optional)
     ctx.font = '18px Sans';
     ctx.fillStyle = '#fff';
