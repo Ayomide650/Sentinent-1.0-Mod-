@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'messageDelete',
   async execute(message) {
@@ -7,4 +6,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
