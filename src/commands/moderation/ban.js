@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { supabase } = require('../../database/database');
+const supabase = require('../../database/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
