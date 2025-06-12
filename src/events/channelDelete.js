@@ -1,9 +1,7 @@
-```javascript
 module.exports = {
   name: 'channelDelete',
   async execute(channel) {
     // Log channel deletion: info, deleter
-    // ...existing code...
+    console.log(`Channel deleted: ${channel.name} (ID: ${channel.id})`);
   }
 };
-```
