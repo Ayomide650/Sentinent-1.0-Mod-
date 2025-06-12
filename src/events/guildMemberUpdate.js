@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'guildMemberUpdate',
   async execute(oldMember, newMember) {
@@ -6,4 +5,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
