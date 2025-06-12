@@ -5,4 +5,3 @@ module.exports = {
     console.log(`Channel updated: ${oldChannel.name} -> ${newChannel.name}`);
   }
 };
-```
