@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'roleDelete',
   async execute(role) {
@@ -6,4 +5,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
