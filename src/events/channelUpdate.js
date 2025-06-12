@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'channelUpdate',
   async execute(oldChannel, newChannel) {
