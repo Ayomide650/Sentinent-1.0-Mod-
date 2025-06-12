@@ -1,4 +1,3 @@
-```javascript
 module.exports = {
   name: 'voiceStateUpdate',
   async execute(oldState, newState) {
@@ -6,4 +5,3 @@ module.exports = {
     // ...existing code...
   }
 };
-```
