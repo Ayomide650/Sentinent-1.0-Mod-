@@ -6,12 +6,20 @@
 // - Express server for health checks (PORT 3000)
 // - Graceful shutdown handling
 // - Enhanced error recovery system
+// - Integrated XP and leveling system
 
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+
+// Import leveling system
+const { createClient } = require('@supabase/supabase-js');
+const levelService = require('./src/services/levelService');
+
+// Initialize Supabase client
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 // --- Express server for Render port binding and health checks ---
 const app = express();
@@ -64,6 +72,147 @@ const client = new Client({
 // Initialize collections
 client.commands = new Collection();
 client.cooldowns = new Collection();
+
+// XP cooldown system (prevent spam)
+client.xpCooldowns = new Collection();
+
+// --- Leveling System Functions ---
+async function getUserLevel(guildId, userId) {
+  try {
+    const { data, error } = await supabase
+      .from('user_levels')
+      .select('level, xp')
+      .eq('guild_id', guildId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || { level: 0, xp: 0 };
+  } catch (error) {
+    console.error('Error getting user level:', error);
+    return { level: 0, xp: 0 };
+  }
+}
+
+async function updateUserXP(guildId, userId, xpGained) {
+  try {
+    const userData = await getUserLevel(guildId, userId);
+    const newXP = userData.xp + xpGained;
+    const newLevel = Math.floor(Math.sqrt(newXP / 100)); // XP formula
+    
+    await supabase
+      .from('user_levels')
+      .upsert({
+        guild_id: guildId,
+        user_id: userId,
+        level: newLevel,
+        xp: newXP,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'guild_id,user_id'
+      });
+
+    return { 
+      oldLevel: userData.level, 
+      newLevel, 
+      xpGained,
+      totalXP: newXP 
+    };
+  } catch (error) {
+    console.error('Error updating user XP:', error);
+    return null;
+  }
+}
+
+async function getLevelRewards(guildId) {
+  try {
+    const { data, error } = await supabase
+      .from('level_rewards')
+      .select('*')
+      .eq('guild_id', guildId)
+      .order('level', { ascending: true });
+    
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error getting level rewards:', error);
+    return [];
+  }
+}
+
+async function handleMilestoneRoles(guild, member, newLevel, oldLevel) {
+  try {
+    const rewards = await getLevelRewards(guild.id);
+    if (rewards.length === 0) return;
+
+    // Find current milestone (highest level reward user qualifies for)
+    const currentMilestone = rewards
+      .filter(reward => reward.level <= newLevel)
+      .sort((a, b) => b.level - a.level)[0];
+
+    // Find previous milestone
+    const previousMilestone = rewards
+      .filter(reward => reward.level <= oldLevel)
+      .sort((a, b) => b.level - a.level)[0];
+
+    // Remove old milestone role if different from current
+    if (previousMilestone && (!currentMilestone || previousMilestone.role_id !== currentMilestone?.role_id)) {
+      try {
+        const oldRole = guild.roles.cache.get(previousMilestone.role_id);
+        if (oldRole && member.roles.cache.has(oldRole.id)) {
+          await member.roles.remove(oldRole);
+          console.log(`🔄 Removed old milestone role ${oldRole.name} from ${member.user.tag}`);
+        }
+      } catch (error) {
+        console.error('Error removing old milestone role:', error);
+      }
+    }
+
+    // Add new milestone role
+    if (currentMilestone) {
+      try {
+        const newRole = guild.roles.cache.get(currentMilestone.role_id);
+        if (newRole && !member.roles.cache.has(newRole.id)) {
+          await member.roles.add(newRole);
+          console.log(`🎉 Added milestone role ${newRole.name} to ${member.user.tag} for level ${newLevel}`);
+          
+          return newRole; // Return role for level-up message
+        }
+      } catch (error) {
+        console.error('Error adding new milestone role:', error);
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error handling milestone roles:', error);
+    return null;
+  }
+}
+
+async function sendLevelUpMessage(channel, member, oldLevel, newLevel, milestoneRole = null) {
+  try {
+    if (!channel || !channel.permissionsFor(channel.guild.members.me)?.has('SendMessages')) {
+      return;
+    }
+
+    let message = `🎉 **Level Up!** ${member} reached **Level ${newLevel}**!`;
+    
+    if (milestoneRole) {
+      message += `\n🏆 **Milestone Reward:** ${milestoneRole} role unlocked!`;
+    }
+
+    // Add progress info using levelService
+    const nextMilestone = levelService.getNextMilestone(newLevel);
+    if (nextMilestone) {
+      message += `\n📈 Next milestone: **Level ${nextMilestone}**`;
+    }
+
+    await channel.send(message);
+  } catch (error) {
+    console.error('Error sending level up message:', error);
+  }
+}
 
 // --- Slash Command Registration Function ---
 async function deployCommands() {
@@ -200,6 +349,66 @@ client.once('ready', async () => {
     console.log('🚀 Bot is fully ready and operational!');
   } catch (error) {
     console.error('❌ Error during bot initialization:', error);
+  }
+});
+
+// Handle messages for XP gain
+client.on('messageCreate', async (message) => {
+  // Ignore bots and DMs
+  if (message.author.bot || !message.guild) return;
+
+  // XP cooldown check (prevent spam) - 5 seconds cooldown
+  const cooldownKey = `${message.guild.id}-${message.author.id}`;
+  const now = Date.now();
+  const cooldownAmount = 5 * 1000; // 5 seconds
+
+  if (client.xpCooldowns.has(cooldownKey)) {
+    const expirationTime = client.xpCooldowns.get(cooldownKey) + cooldownAmount;
+    if (now < expirationTime) return; // Still on cooldown
+  }
+
+  client.xpCooldowns.set(cooldownKey, now);
+
+  // Calculate XP gain (15-25 XP per message)
+  const xpGained = Math.floor(Math.random() * 11) + 15;
+
+  try {
+    // Update user XP and check for level up
+    const result = await updateUserXP(message.guild.id, message.author.id, xpGained);
+    
+    if (result && result.newLevel > result.oldLevel) {
+      console.log(`📈 ${message.author.tag} leveled up from ${result.oldLevel} to ${result.newLevel}!`);
+      
+      // Handle milestone roles
+      const milestoneRole = await handleMilestoneRoles(
+        message.guild, 
+        message.member, 
+        result.newLevel, 
+        result.oldLevel
+      );
+      
+      // Send level up message
+      await sendLevelUpMessage(
+        message.channel, 
+        message.member, 
+        result.oldLevel, 
+        result.newLevel, 
+        milestoneRole
+      );
+    }
+  } catch (error) {
+    console.error('❌ Error handling XP gain:', error);
+  }
+
+  // Clean up old cooldowns every 5 minutes
+  if (Math.random() < 0.01) { // 1% chance to run cleanup
+    const expiredCooldowns = [];
+    for (const [key, timestamp] of client.xpCooldowns.entries()) {
+      if (now - timestamp > cooldownAmount) {
+        expiredCooldowns.push(key);
+      }
+    }
+    expiredCooldowns.forEach(key => client.xpCooldowns.delete(key));
   }
 });
 
