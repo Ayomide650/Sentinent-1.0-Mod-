@@ -1,11 +1,11 @@
-import { pool } from '../database/connection';
+const { pool } = require('../database/connection');
 
-export async function getStoreItems() {
+async function getStoreItems() {
     const result = await pool.query('SELECT * FROM store_items');
     return result.rows;
 }
 
-export async function getUserInventory(userId: string) {
+async function getUserInventory(userId) {
     const result = await pool.query(
         `SELECT i.*, s.name, s.description 
          FROM user_inventory i 
@@ -16,7 +16,7 @@ export async function getUserInventory(userId: string) {
     return result.rows;
 }
 
-export async function purchaseItem(userId: string, itemName: string) {
+async function purchaseItem(userId, itemName) {
     const item = await pool.query(
         'SELECT * FROM store_items WHERE name = $1',
         [itemName]
@@ -32,9 +32,32 @@ export async function purchaseItem(userId: string, itemName: string) {
     );
 }
 
-export async function activateItem(userId: string, itemId: number) {
+async function activateItem(userId, itemId) {
     await pool.query(
         'UPDATE user_inventory SET active = true, expires_at = NOW() + INTERVAL \'1 hour\' WHERE id = $1 AND user_id = $2',
         [itemId, userId]
     );
 }
+
+async function checkItemExpiry() {
+    await pool.query(
+        'UPDATE user_inventory SET active = false WHERE expires_at < NOW() AND active = true'
+    );
+}
+
+async function checkItemOwnership(userId, itemType) {
+    const result = await pool.query(
+        'SELECT * FROM user_inventory WHERE user_id = $1 AND item_type = $2 AND active = false',
+        [userId, itemType]
+    );
+    return result.rows.length > 0;
+}
+
+module.exports = {
+    getStoreItems,
+    getUserInventory,
+    purchaseItem,
+    activateItem,
+    checkItemExpiry,
+    checkItemOwnership
+};
