@@ -1,10 +1,5 @@
-const { createClient } = require('@supabase/supabase-js');
-
-// Initialize Supabase client
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
-);
+// Import your existing database connection
+const { supabase } = require('../database/database.js');
 
 // Milestone levels that trigger special rewards
 const MILESTONE_LEVELS = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100];
