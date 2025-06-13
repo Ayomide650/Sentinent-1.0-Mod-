@@ -6,28 +6,29 @@ export const data = new SlashCommandBuilder()
     .setDescription('Claim your daily coins');
 
 export async function execute(interaction: CommandInteraction) {
-    const userId = interaction.user.id;
     const result = await pool.query(
         'SELECT last_daily FROM user_coins WHERE user_id = $1',
-        [userId]
+        [interaction.user.id]
     );
 
     const now = new Date();
-    const lastDaily = result.rows[0]?.last_daily;
     const resetTime = new Date(now);
     resetTime.setHours(4, 0, 0, 0); // 4:00 AM WAT
 
-    if (lastDaily && now < resetTime && lastDaily > resetTime.setDate(resetTime.getDate() - 1)) {
-        return interaction.reply({ 
-            content: 'You\'ve already claimed your daily coins!',
-            ephemeral: true 
-        });
+    if (result.rows[0]?.last_daily) {
+        const lastDaily = new Date(result.rows[0].last_daily);
+        if (lastDaily > resetTime) {
+            return interaction.reply({
+                content: 'You\'ve already claimed your daily coins! Try again after 4:00 AM WAT.',
+                ephemeral: true
+            });
+        }
     }
 
-    await updateUserCoins(userId, 50);
+    await updateUserCoins(interaction.user.id, 50);
     await pool.query(
         'UPDATE user_coins SET last_daily = NOW() WHERE user_id = $1',
-        [userId]
+        [interaction.user.id]
     );
 
     await interaction.reply({
