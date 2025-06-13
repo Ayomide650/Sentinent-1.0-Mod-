@@ -1,15 +1,6 @@
-import { Pool } from 'pg';
-import { Client } from 'discord.js';
+const { pool } = require('../database/connection');
 
-const pool = new Pool({
-    user: 'postgres',
-    password: 'your_password',
-    host: 'localhost',
-    database: 'sentinent_bot',
-    port: 5432,
-});
-
-export async function getUserCoins(userId: string): Promise<number> {
+async function getUserCoins(userId) {
     const result = await pool.query(
         'SELECT coins FROM user_coins WHERE user_id = $1',
         [userId]
@@ -17,7 +8,7 @@ export async function getUserCoins(userId: string): Promise<number> {
     return result.rows[0]?.coins || 0;
 }
 
-export async function updateUserCoins(userId: string, amount: number): Promise<void> {
+async function updateUserCoins(userId, amount) {
     await pool.query(
         `INSERT INTO user_coins (user_id, coins) 
          VALUES ($1, $2)
@@ -27,7 +18,7 @@ export async function updateUserCoins(userId: string, amount: number): Promise<v
     );
 }
 
-export async function handleMessageReward(userId: string): Promise<void> {
+async function handleMessageReward(userId) {
     const lastMessage = await pool.query(
         'SELECT last_message FROM user_coins WHERE user_id = $1',
         [userId]
@@ -44,13 +35,13 @@ export async function handleMessageReward(userId: string): Promise<void> {
     }
 }
 
-export async function distributeWeeklyRewards(): Promise<void> {
-    const rewards = [400, 300, 200, 150, 100];
-    const topUsers = await pool.query(
-        'SELECT user_id, SUM(amount_won) as total_won FROM game_history GROUP BY user_id ORDER BY total_won DESC LIMIT 5'
-    );
-
-    for (let i = 0; i < topUsers.rows.length; i++) {
-        await updateUserCoins(topUsers.rows[i].user_id, rewards[i]);
-    }
+async function handleLevelUpReward(userId) {
+    await updateUserCoins(userId, 50);
 }
+
+module.exports = {
+    getUserCoins,
+    updateUserCoins,
+    handleMessageReward,
+    handleLevelUpReward
+};
