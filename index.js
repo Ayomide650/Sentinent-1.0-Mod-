@@ -18,8 +18,52 @@ require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const levelService = require('./src/services/levelService');
 
-// Initialize Supabase client
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// Initialize Supabase client with consistent environment variable naming
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+
+// Validate required environment variables
+if (!SUPABASE_URL) {
+  console.error('❌ SUPABASE_URL is required. Please set it in your environment variables.');
+  process.exit(1);
+}
+
+if (!SUPABASE_KEY) {
+  console.error('❌ SUPABASE_KEY (or SUPABASE_ANON_KEY) is required. Please set it in your environment variables.');
+  process.exit(1);
+}
+
+if (!process.env.DISCORD_TOKEN) {
+  console.error('❌ DISCORD_TOKEN is required. Please set it in your environment variables.');
+  process.exit(1);
+}
+
+if (!process.env.CLIENT_ID) {
+  console.error('❌ CLIENT_ID is required. Please set it in your environment variables.');
+  process.exit(1);
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Test Supabase connection
+async function testSupabaseConnection() {
+  try {
+    const { data, error } = await supabase
+      .from('user_levels')
+      .select('count', { count: 'exact', head: true });
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('❌ Supabase connection test failed:', error.message);
+      return false;
+    }
+    
+    console.log('✅ Supabase connection successful');
+    return true;
+  } catch (error) {
+    console.error('❌ Supabase connection error:', error.message);
+    return false;
+  }
+}
 
 // --- Express server for Render port binding and health checks ---
 const app = express();
@@ -203,9 +247,14 @@ async function sendLevelUpMessage(channel, member, oldLevel, newLevel, milestone
     }
 
     // Add progress info using levelService
-    const nextMilestone = levelService.getNextMilestone(newLevel);
-    if (nextMilestone) {
-      message += `\n📈 Next milestone: **Level ${nextMilestone}**`;
+    try {
+      const nextMilestone = levelService.getNextMilestone(newLevel);
+      if (nextMilestone) {
+        message += `\n📈 Next milestone: **Level ${nextMilestone}**`;
+      }
+    } catch (error) {
+      // levelService might not be available, continue without it
+      console.log('ℹ️  levelService not available for milestone info');
     }
 
     await channel.send(message);
@@ -220,25 +269,45 @@ async function deployCommands() {
     console.log('🔄 Starting slash command registration...');
     
     const commands = [];
-    const commandFolders = fs.readdirSync(path.join(__dirname, 'src/commands'));
+    const commandsPath = path.join(__dirname, 'src/commands');
+    
+    // Check if commands directory exists
+    if (!fs.existsSync(commandsPath)) {
+      console.log('⚠️  Commands directory not found, skipping command registration');
+      return;
+    }
+    
+    const commandFolders = fs.readdirSync(commandsPath);
     
     // Load all commands from subfolders
     for (const folder of commandFolders) {
-      const commandFiles = fs.readdirSync(path.join(__dirname, 'src/commands', folder))
+      const folderPath = path.join(commandsPath, folder);
+      if (!fs.statSync(folderPath).isDirectory()) continue;
+      
+      const commandFiles = fs.readdirSync(folderPath)
         .filter(file => file.endsWith('.js'));
       
       for (const file of commandFiles) {
-        const filePath = path.join(__dirname, 'src/commands', folder, file);
-        const command = require(filePath);
-        
-        if ('data' in command && 'execute' in command) {
-          commands.push(command.data.toJSON());
-          client.commands.set(command.data.name, command);
-          console.log(`✅ Loaded command: ${command.data.name}`);
-        } else {
-          console.log(`⚠️  Command at ${filePath} is missing required "data" or "execute" property.`);
+        const filePath = path.join(folderPath, file);
+        try {
+          const command = require(filePath);
+          
+          if ('data' in command && 'execute' in command) {
+            commands.push(command.data.toJSON());
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Loaded command: ${command.data.name}`);
+          } else {
+            console.log(`⚠️  Command at ${filePath} is missing required "data" or "execute" property.`);
+          }
+        } catch (error) {
+          console.error(`❌ Error loading command ${file}:`, error.message);
         }
       }
+    }
+    
+    if (commands.length === 0) {
+      console.log('⚠️  No commands found to register');
+      return;
     }
     
     // Deploy commands to Discord
@@ -273,7 +342,7 @@ async function deployCommands() {
     
   } catch (error) {
     console.error('❌ Error deploying commands:', error);
-    throw error;
+    // Don't throw - allow bot to continue without commands if needed
   }
 }
 
@@ -282,6 +351,13 @@ async function initializeDatabase() {
   try {
     console.log('🗄️  Initializing database...');
     
+    // Test Supabase connection first
+    const connectionTest = await testSupabaseConnection();
+    if (!connectionTest) {
+      console.log('⚠️  Database connection failed, continuing without database features');
+      return false;
+    }
+    
     // Check if database handler exists
     const dbPath = path.join(__dirname, 'src/database/database.js');
     if (fs.existsSync(dbPath)) {
@@ -289,13 +365,16 @@ async function initializeDatabase() {
       if (typeof database.initialize === 'function') {
         await database.initialize();
         console.log('✅ Database initialized successfully');
+        return true;
       }
     } else {
       console.log('⚠️  Database handler not found, skipping database initialization');
     }
+    
+    return true;
   } catch (error) {
     console.error('❌ Database initialization failed:', error);
-    // Don't throw - allow bot to continue without database if needed
+    return false;
   }
 }
 
@@ -327,7 +406,7 @@ function loadHandlers() {
     
   } catch (error) {
     console.error('❌ Error loading handlers:', error);
-    throw error;
+    // Don't throw - allow bot to continue without handlers if needed
   }
 }
 
@@ -341,12 +420,15 @@ client.once('ready', async () => {
   
   try {
     // Initialize database
-    await initializeDatabase();
+    const dbSuccess = await initializeDatabase();
     
     // Deploy slash commands
     await deployCommands();
     
     console.log('🚀 Bot is fully ready and operational!');
+    console.log(`📊 Database: ${dbSuccess ? 'Connected' : 'Disconnected'}`);
+    console.log(`📝 Commands: ${client.commands.size} loaded`);
+    
   } catch (error) {
     console.error('❌ Error during bot initialization:', error);
   }
@@ -518,6 +600,12 @@ process.on('SIGTERM', async () => {
 async function startBot() {
   try {
     console.log('🚀 Starting bot initialization...');
+    console.log('🔍 Environment check:');
+    console.log(`   - DISCORD_TOKEN: ${process.env.DISCORD_TOKEN ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - CLIENT_ID: ${process.env.CLIENT_ID ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - SUPABASE_KEY: ${SUPABASE_KEY ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
     
     // Load handlers first
     loadHandlers();
