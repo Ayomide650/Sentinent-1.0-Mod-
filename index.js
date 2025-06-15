@@ -269,23 +269,34 @@ async function deployCommands() {
     console.log('🔄 Starting slash command registration...');
     
     const commands = [];
+    const commandNames = new Set();
     const commandsPath = path.join(__dirname, 'src/commands');
+    
+    console.log(`📁 Scanning directory: ${commandsPath}`);
     
     // Check if commands directory exists
     if (!fs.existsSync(commandsPath)) {
-      console.log('⚠️  Commands directory not found, skipping command registration');
+      console.error('❌ Commands directory not found at:', commandsPath);
       return;
     }
     
     const commandFolders = fs.readdirSync(commandsPath);
+    console.log('📂 Found folders:', commandFolders);
     
     // Load all commands from subfolders
     for (const folder of commandFolders) {
       const folderPath = path.join(commandsPath, folder);
-      if (!fs.statSync(folderPath).isDirectory()) continue;
+      console.log(`\n📂 Scanning folder: ${folder}`);
+      
+      if (!fs.statSync(folderPath).isDirectory()) {
+        console.log(`⚠️ Skipping non-directory: ${folder}`);
+        continue;
+      }
       
       const commandFiles = fs.readdirSync(folderPath)
         .filter(file => file.endsWith('.js'));
+      
+      console.log(`📄 Found command files in ${folder}:`, commandFiles);
       
       for (const file of commandFiles) {
         const filePath = path.join(folderPath, file);
@@ -293,9 +304,18 @@ async function deployCommands() {
           const command = require(filePath);
           
           if ('data' in command && 'execute' in command) {
+            const commandName = command.data.name;
+            
+            // Check for duplicate command names
+            if (commandNames.has(commandName)) {
+              console.log(`⚠️  Duplicate command name found: ${commandName} in ${filePath}. Skipping...`);
+              continue;
+            }
+            
+            commandNames.add(commandName);
             commands.push(command.data.toJSON());
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Loaded command: ${command.data.name}`);
+            client.commands.set(commandName, command);
+            console.log(`✅ Loaded command: ${commandName} from ${folder}/${file}`);
           } else {
             console.log(`⚠️  Command at ${filePath} is missing required "data" or "execute" property.`);
           }
@@ -309,6 +329,8 @@ async function deployCommands() {
       console.log('⚠️  No commands found to register');
       return;
     }
+    
+    console.log(`📊 Found ${commands.length} unique commands to register`);
     
     // Deploy commands to Discord
     const rest = new REST().setToken(process.env.DISCORD_TOKEN);
