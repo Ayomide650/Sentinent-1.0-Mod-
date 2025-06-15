@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -7,7 +7,6 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
-        // Check if user has admin role
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({
                 content: 'You do not have permission to use this command.',
@@ -15,47 +14,48 @@ module.exports = {
             });
         }
 
-        await interaction.reply({
-            content: 'Please enter the message you want to send:',
-            ephemeral: true
-        });
+        // Create the modal
+        const modal = new ModalBuilder()
+            .setCustomId('sendMessageModal')
+            .setTitle('Send Bot Message');
 
-        try {
-            const messageFilter = m => m.author.id === interaction.user.id;
-            const messageCollector = interaction.channel.createMessageCollector({
-                filter: messageFilter,
-                time: 60000,
-                max: 1
-            });
+        // Add message content input
+        const messageInput = new TextInputBuilder()
+            .setCustomId('messageContent')
+            .setLabel('Message Content')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Enter your message here...')
+            .setRequired(true);
 
-            messageCollector.on('collect', async (message) => {
-                const messageContent = message.content;
-                message.delete(); // Delete the user's message
+        // Add channel input
+        const channelInput = new TextInputBuilder()
+            .setCustomId('channelId')
+            .setLabel('Channel ID')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter the channel ID')
+            .setRequired(true);
 
-                // Ask about @everyone mention
-                const everyoneResponse = await interaction.followUp({
-                    content: 'Do you want to mention @everyone? (yes/no)',
-                    ephemeral: true
-                });
+        // Add @everyone toggle
+        const everyoneInput = new TextInputBuilder()
+            .setCustomId('mentionEveryone')
+            .setLabel('Mention @everyone? (yes/no)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('yes or no')
+            .setRequired(true)
+            .setMaxLength(3);
 
-                const everyoneFilter = m => m.author.id === interaction.user.id && ['yes', 'no'].includes(m.content.toLowerCase());
-                const everyoneCollector = interaction.channel.createMessageCollector({
-                    filter: everyoneFilter,
-                    time: 30000,
-                    max: 1
-                });
+        // Add inputs to action rows
+        const firstActionRow = new ActionRowBuilder().addComponents(messageInput);
+        const secondActionRow = new ActionRowBuilder().addComponents(channelInput);
+        const thirdActionRow = new ActionRowBuilder().addComponents(everyoneInput);
 
-                everyoneCollector.on('collect', async (everyoneMsg) => {
-                    const shouldMentionEveryone = everyoneMsg.content.toLowerCase() === 'yes';
-                    everyoneMsg.delete(); // Delete the response
+        // Add action rows to modal
+        modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
 
-                    // Ask for target channel
-                    const channelResponse = await interaction.followUp({
-                        content: 'Please mention the channel where you want to send this message:',
-                        ephemeral: true
-                    });
-
-                    const channelFilter = m => m.author.id === interaction.user.id && m.mentions.channels.size > 0;
+        // Show the modal
+        await interaction.showModal(modal);
+    }
+};
                     const channelCollector = interaction.channel.createMessageCollector({
                         filter: channelFilter,
                         time: 30000,
