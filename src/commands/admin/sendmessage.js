@@ -14,12 +14,10 @@ module.exports = {
             });
         }
 
-        // Create the modal
         const modal = new ModalBuilder()
             .setCustomId('sendMessageModal')
             .setTitle('Send Bot Message');
 
-        // Add message content input
         const messageInput = new TextInputBuilder()
             .setCustomId('messageContent')
             .setLabel('Message Content')
@@ -27,7 +25,6 @@ module.exports = {
             .setPlaceholder('Enter your message here...')
             .setRequired(true);
 
-        // Add channel input
         const channelInput = new TextInputBuilder()
             .setCustomId('channelId')
             .setLabel('Channel ID')
@@ -35,7 +32,6 @@ module.exports = {
             .setPlaceholder('Enter the channel ID')
             .setRequired(true);
 
-        // Add @everyone toggle
         const everyoneInput = new TextInputBuilder()
             .setCustomId('mentionEveryone')
             .setLabel('Mention @everyone? (yes/no)')
@@ -44,11 +40,15 @@ module.exports = {
             .setRequired(true)
             .setMaxLength(3);
 
-        // Add inputs to action rows
         const firstActionRow = new ActionRowBuilder().addComponents(messageInput);
         const secondActionRow = new ActionRowBuilder().addComponents(channelInput);
         const thirdActionRow = new ActionRowBuilder().addComponents(everyoneInput);
 
+        modal.addComponents([firstActionRow, secondActionRow, thirdActionRow]);
+
+        await interaction.showModal(modal);
+    }
+};
         // Add action rows to modal
         modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
 
