@@ -50,6 +50,7 @@ module.exports = {
             const number2 = interaction.options.getInteger('number2');
             const multiplierChoice = interaction.options.getString('multipliers');
             const userId = interaction.user.id;
+            const guildId = interaction.guild.id; // Added guildId
 
             // Input validation
             if (amount <= 0) {
@@ -66,8 +67,8 @@ module.exports = {
                 });
             }
 
-            // Check user's coins
-            const userCoins = await getUserCoins(userId);
+            // Check user's coins - now passing guildId and userId
+            const userCoins = await getUserCoins(guildId, userId);
             if (userCoins < amount) {
                 return await interaction.reply({
                     content: `❌ You don't have enough coins! You have ${userCoins} coins but tried to bet ${amount}.`,
@@ -94,11 +95,11 @@ module.exports = {
             const won = multiplier > 0;
             const coinChange = won ? (amount * multiplier) - amount : -amount;
             
-            // Update user's coins
-            await updateUserCoins(userId, coinChange);
+            // Update user's coins - now passing guildId, userId, and coinChange
+            await updateUserCoins(guildId, userId, coinChange);
             
-            // Get updated balance
-            const newBalance = await getUserCoins(userId);
+            // Get updated balance - now passing guildId and userId
+            const newBalance = await getUserCoins(guildId, userId);
 
             // Create result message
             const diceEmoji = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][diceRoll];
