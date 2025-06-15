@@ -8,7 +8,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({
+            return await interaction.reply({
                 content: 'You do not have permission to use this command.',
                 ephemeral: true
             });
@@ -40,23 +40,23 @@ module.exports = {
             .setRequired(true)
             .setMaxLength(3);
 
-        const firstActionRow = new ActionRowBuilder().addComponents(messageInput);
-        const secondActionRow = new ActionRowBuilder().addComponents(channelInput);
-        const thirdActionRow = new ActionRowBuilder().addComponents(everyoneInput);
+        const firstRow = new ActionRowBuilder().addComponents(messageInput);
+        const secondRow = new ActionRowBuilder().addComponents(channelInput);
+        const thirdRow = new ActionRowBuilder().addComponents(everyoneInput);
 
-        modal.addComponents([firstActionRow, secondActionRow, thirdActionRow]);
+        modal.addComponents(firstRow, secondRow, thirdRow);
 
-        await interaction.showModal(modal);
+        try {
+            await interaction.showModal(modal);
+        } catch (error) {
+            console.error('Error showing modal:', error);
+            await interaction.reply({
+                content: 'Failed to show message form.',
+                ephemeral: true
+            });
+        }
     }
 };
-        // Add action rows to modal
-        modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
-
-        // Show the modal
-        await interaction.showModal(modal);
-    }
-};
-                    const channelCollector = interaction.channel.createMessageCollector({
                         filter: channelFilter,
                         time: 30000,
                         max: 1
