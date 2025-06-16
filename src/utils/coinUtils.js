@@ -50,14 +50,13 @@ async function updateUserCoins(guildId, userId, amount) {
     const currentCoins = await getUserCoins(guildId, userId);
     const newBalance = Math.max(0, currentCoins + amount); // Prevent negative balances
 
-    // Update or insert record
+    // Update or insert record - REMOVED updated_at
     const { data, error } = await supabase
       .from('user_coins')
       .upsert({
         guild_id: guildId,
         user_id: userId,
-        coins: newBalance,
-        updated_at: new Date().toISOString()
+        coins: newBalance
       }, {
         onConflict: 'guild_id,user_id'
       })
@@ -86,13 +85,13 @@ async function setUserCoins(guildId, userId, amount) {
   try {
     const newBalance = Math.max(0, amount); // Prevent negative balances
 
+    // REMOVED updated_at
     const { data, error } = await supabase
       .from('user_coins')
       .upsert({
         guild_id: guildId,
         user_id: userId,
-        coins: newBalance,
-        updated_at: new Date().toISOString()
+        coins: newBalance
       }, {
         onConflict: 'guild_id,user_id'
       })
@@ -240,7 +239,7 @@ async function claimDailyReward(guildId, userId, dailyAmount = 100) {
     // Add coins
     const newBalance = await updateUserCoins(guildId, userId, dailyAmount);
 
-    // Record the claim
+    // Record the claim - REMOVED updated_at, but kept claimed_at since it's needed for the daily claim logic
     await supabase
       .from('daily_claims')
       .upsert({
