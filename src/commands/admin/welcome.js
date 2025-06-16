@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
-const { supabase } = require('../../database/database.js');
+const supabase = require('../../database/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
