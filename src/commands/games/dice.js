@@ -68,6 +68,8 @@ module.exports = {
             }
 
             // Check user's coins - now passing guildId and userId
+            console.log("guildId:", interaction.guild?.id);
+            console.log("userId:", userId);
             const userCoins = await getUserCoins(guildId, userId);
             if (userCoins < amount) {
                 return await interaction.reply({
@@ -99,6 +101,8 @@ module.exports = {
             await updateUserCoins(guildId, userId, coinChange);
             
             // Get updated balance - now passing guildId and userId
+            console.log("guildId:", interaction.guild?.id);
+            console.log("userId:", userId);
             const newBalance = await getUserCoins(guildId, userId);
 
             // Create result message
