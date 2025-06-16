@@ -37,13 +37,13 @@ module.exports = {
 			const currentCoins = userData?.coins || 0;
 			const newBalance = currentCoins + amount;
 
+			// NO USERNAME FIELD HERE - This is the key fix
 			const { error: upsertError } = await supabase
 				.from('user_coins')
 				.upsert({
 					guild_id: interaction.guild.id,
 					user_id: targetUser.id,
-					coins: newBalance,
-					username: targetUser.username
+					coins: newBalance
 				});
 
 			if (upsertError) {
