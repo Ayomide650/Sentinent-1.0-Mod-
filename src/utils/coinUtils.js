@@ -50,18 +50,19 @@ async function updateUserCoins(guildId, userId, amount) {
     const currentCoins = await getUserCoins(guildId, userId);
     const newBalance = Math.max(0, currentCoins + amount); // Prevent negative balances
 
-    // Update or insert record - REMOVED updated_at
-    const { data, error } = await supabase
-      .from('user_coins')
-      .upsert({
-        guild_id: guildId,
-        user_id: userId,
-        coins: newBalance
-      }, {
-        onConflict: 'guild_id,user_id'
-      })
-      .select('coins')
-      .single();
+    // In updateUserCoins function, change this:
+const { data, error } = await supabase
+  .from('user_coins')
+  .upsert({
+    guild_id: guildId,
+    user_id: userId,
+    coins: newBalance
+  }, {
+    onConflict: 'user_id'  // Changed from 'guild_id,user_id' to just 'user_id'
+  })
+  .select('coins')
+  .single();
+
 
     if (error) {
       throw error;
@@ -85,18 +86,18 @@ async function setUserCoins(guildId, userId, amount) {
   try {
     const newBalance = Math.max(0, amount); // Prevent negative balances
 
-    // REMOVED updated_at
-    const { data, error } = await supabase
-      .from('user_coins')
-      .upsert({
-        guild_id: guildId,
-        user_id: userId,
-        coins: newBalance
-      }, {
-        onConflict: 'guild_id,user_id'
-      })
-      .select('coins')
-      .single();
+    // Same change in setUserCoins function:
+const { data, error } = await supabase
+  .from('user_coins')
+  .upsert({
+    guild_id: guildId,
+    user_id: userId,
+    coins: newBalance
+  }, {
+    onConflict: 'user_id'  // Changed here too
+  })
+  .select('coins')
+  .single();
 
     if (error) {
       throw error;
