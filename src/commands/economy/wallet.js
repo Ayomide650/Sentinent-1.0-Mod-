@@ -18,8 +18,9 @@ module.exports = {
                 });
             }
 
-            // Fixed: Pass guildId first, then userId
-            const coins = await getUserCoins(interaction.guild.id, interaction.user.id);
+            console.log("guildId:", interaction.guild?.id);
+            console.log("userId:", interaction.user?.id);
+            const coins = await getUserCoins(interaction.user.id, interaction.guildId);
             
             const embed = new EmbedBuilder()
                 .setColor('#FFD700')
