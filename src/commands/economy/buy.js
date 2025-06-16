@@ -1,48 +1,41 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { getUserCoins, updateUserCoins } = require('../../utils/coinUtils');
-const { purchaseItem, getStoreItems } = require('../../utils/inventoryUtils');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { getUserCoins } = require('../../utils/coinUtils');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('buy')
-        .setDescription('Purchase an item from the shop')
-        .addStringOption(option =>
-            option.setName('item')
-                .setDescription('Item to purchase')
-                .setRequired(true)
-        ),
+        .setName('wallet')
+        .setDescription('Check your coin balance'),
 
     async execute(interaction) {
-        const itemName = interaction.options.getString('item');
-        const items = await getStoreItems();
-        const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
-
-        if (!item) {
-            return interaction.reply({
-                content: 'Item not found in shop!',
-                ephemeral: true
-            });
-        }
-
-        const userCoins = await getUserCoins(interaction.user.id);
-        if (userCoins < item.price) {
-            return interaction.reply({
-                content: `You need ${item.price} coins to buy this item!`,
-                ephemeral: true
-            });
-        }
-
         try {
-            await purchaseItem(interaction.user.id, item.name);
-            await updateUserCoins(interaction.user.id, -item.price);
+            // Check if user is admin
+            const isAdmin = interaction.member.permissions.has('Administrator');
             
+            if (isAdmin) {
+                return await interaction.reply({
+                    content: `Your wallet balance: 999999999 coins 👑`,
+                    ephemeral: true
+                });
+            }
+
+            console.log("guildId:", interaction.guild?.id);
+            console.log("userId:", interaction.user?.id);
+            const coins = await getUserCoins(interaction.user.id, interaction.guildId);
+            
+            const embed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle(`${interaction.user.username}'s Wallet`)
+                .setDescription(`Current Balance: ${coins} coins 🪙`)
+                .setTimestamp();
+
             await interaction.reply({
-                content: `Successfully purchased ${item.name}!`,
+                embeds: [embed],
                 ephemeral: true
             });
         } catch (error) {
+            console.error('Error in wallet command:', error);
             await interaction.reply({
-                content: 'Failed to purchase item. Please try again.',
+                content: 'Error checking wallet balance!',
                 ephemeral: true
             });
         }
