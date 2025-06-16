@@ -50,7 +50,7 @@ module.exports = {
                 embed.addFields([
                     {
                         name: '💡 Tips',
-                        value: '• Use `/daily` to claim 500 coins every day!,
+                        value: '• Use `/daily` to claim 500 coins every day!',
                         inline: false
                     }
                 ]);
