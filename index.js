@@ -587,42 +587,7 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-// --- Graceful Shutdown ---
-process.on('SIGINT', async () => {
-  console.log('🛑 Received SIGINT, shutting down gracefully...');
-  
-  try {
-    server.close(() => {
-      console.log('🌐 HTTP server closed');
-    });
-    
-    client.destroy();
-    console.log('🤖 Discord client destroyed');
-    
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error during shutdown:', error);
-    process.exit(1);
-  }
-});
 
-process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, shutting down gracefully...');
-  
-  try {
-    server.close(() => {
-      console.log('🌐 HTTP server closed');
-    });
-    
-    client.destroy();
-    console.log('🤖 Discord client destroyed');
-    
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error during shutdown:', error);
-    process.exit(1);
-  }
-});
 
 // --- Start the bot ---
 async function startBot() {
