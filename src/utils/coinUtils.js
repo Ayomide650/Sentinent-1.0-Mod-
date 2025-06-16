@@ -50,19 +50,17 @@ async function updateUserCoins(guildId, userId, amount) {
     const currentCoins = await getUserCoins(guildId, userId);
     const newBalance = Math.max(0, currentCoins + amount); // Prevent negative balances
 
-    // In updateUserCoins function, change this:
-const { data, error } = await supabase
-  .from('user_coins')
-  .upsert({
-    guild_id: guildId,
-    user_id: userId,
-    coins: newBalance
-  }, {
-    onConflict: 'user_id'  // Changed from 'guild_id,user_id' to just 'user_id'
-  })
-  .select('coins')
-  .single();
-
+    const { data, error } = await supabase
+      .from('user_coins')
+      .upsert({
+        guild_id: guildId,
+        user_id: userId,
+        coins: newBalance
+      }, {
+        onConflict: 'user_id'
+      })
+      .select('coins')
+      .single();
 
     if (error) {
       throw error;
@@ -86,18 +84,17 @@ async function setUserCoins(guildId, userId, amount) {
   try {
     const newBalance = Math.max(0, amount); // Prevent negative balances
 
-    // Same change in setUserCoins function:
-const { data, error } = await supabase
-  .from('user_coins')
-  .upsert({
-    guild_id: guildId,
-    user_id: userId,
-    coins: newBalance
-  }, {
-    onConflict: 'user_id'  // Changed here too
-  })
-  .select('coins')
-  .single();
+    const { data, error } = await supabase
+      .from('user_coins')
+      .upsert({
+        guild_id: guildId,
+        user_id: userId,
+        coins: newBalance
+      }, {
+        onConflict: 'user_id'
+      })
+      .select('coins')
+      .single();
 
     if (error) {
       throw error;
@@ -240,7 +237,7 @@ async function claimDailyReward(guildId, userId, dailyAmount = 100) {
     // Add coins
     const newBalance = await updateUserCoins(guildId, userId, dailyAmount);
 
-    // Record the claim - REMOVED updated_at, but kept claimed_at since it's needed for the daily claim logic
+    // Record the claim
     await supabase
       .from('daily_claims')
       .upsert({
@@ -276,7 +273,8 @@ async function claimDailyReward(guildId, userId, dailyAmount = 100) {
 async function claimDailyCoins(guildId, userId, dailyAmount = 500) {
   try {
     // Get current user data
-    const { data: userData, error: fetchError } = await supabase
+    let userData;
+    const { data: fetchedData, error: fetchError } = await supabase
       .from('user_coins')
       .select('coins, last_daily')
       .eq('guild_id', guildId)
@@ -300,27 +298,34 @@ async function claimDailyCoins(guildId, userId, dailyAmount = 500) {
       userData = newUser;
     } else if (fetchError) {
       throw fetchError;
+    } else {
+      userData = fetchedData;
     }
 
     // Check if user can claim today (4 AM WAT reset)
     const now = new Date();
-    const today = new Date();
-    today.setHours(4, 0, 0, 0); // 4:00 AM today
-
-    // If it's before 4 AM, use yesterday's 4 AM as the reset point
-    if (now.getHours() < 4) {
-      today.setDate(today.getDate() - 1);
+    
+    // Convert current time to WAT (UTC+1)
+    const watNow = new Date(now.getTime() + (1 * 60 * 60 * 1000)); // Add 1 hour for WAT
+    
+    // Get today's 4 AM WAT reset point
+    const todayReset = new Date(watNow);
+    todayReset.setHours(4, 0, 0, 0);
+    
+    // If current WAT time is before 4 AM, use yesterday's 4 AM as the reset point
+    if (watNow.getHours() < 4) {
+      todayReset.setDate(todayReset.getDate() - 1);
     }
 
-    // Check if user has already claimed today
+    // Check if user has already claimed since the last reset
     if (userData.last_daily) {
       const lastDaily = new Date(userData.last_daily);
-      if (lastDaily > today) {
+      if (lastDaily > todayReset) {
         return {
           success: false,
           alreadyClaimed: true,
           newBalance: userData.coins,
-          nextResetTime: new Date(today.getTime() + 24 * 60 * 60 * 1000) // Next 4 AM
+          nextResetTime: new Date(todayReset.getTime() + 24 * 60 * 60 * 1000) // Next 4 AM
         };
       }
     }
@@ -357,6 +362,7 @@ async function claimDailyCoins(guildId, userId, dailyAmount = 500) {
   }
 }
 
+// FIXED: Added claimDailyCoins to the exports
 module.exports = {
   getUserCoins,
   updateUserCoins,
@@ -364,5 +370,6 @@ module.exports = {
   transferCoins,
   getTopUsers,
   canAffordItem,
-  claimDailyReward
+  claimDailyReward,
+  claimDailyCoins  // <-- This was missing!
 };
