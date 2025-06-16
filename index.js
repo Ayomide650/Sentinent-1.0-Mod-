@@ -9,7 +9,6 @@
 // - Integrated XP and leveling system
 
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require('discord.js');
-const express = require('express');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -66,7 +65,7 @@ async function testSupabaseConnection() {
 }
 
 // --- Express server for Render port binding and health checks ---
-const app = express();
+const app = require('express')();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -92,6 +91,12 @@ app.get('/bot-status', (req, res) => {
   } else {
     res.json({ status: 'not ready' });
   }
+});
+
+// Uptime endpoint
+app.get('/', (req, res) => {
+  const uptime = Math.round(client.uptime / 1000);
+  res.send(`Bot has been running for ${uptime} seconds`);
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => {
