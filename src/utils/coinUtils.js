@@ -266,6 +266,97 @@ async function claimDailyReward(guildId, userId, dailyAmount = 100) {
   }
 }
 
+/**
+ * Claim daily coins with 4 AM WAT reset using user_coins table
+ * @param {string} guildId - Guild ID
+ * @param {string} userId - User ID
+ * @param {number} dailyAmount - Daily reward amount (default: 500)
+ * @returns {Promise<{success: boolean, newBalance: number, alreadyClaimed?: boolean}>}
+ */
+async function claimDailyCoins(guildId, userId, dailyAmount = 500) {
+  try {
+    // Get current user data
+    const { data: userData, error: fetchError } = await supabase
+      .from('user_coins')
+      .select('coins, last_daily')
+      .eq('guild_id', guildId)
+      .eq('user_id', userId)
+      .single();
+
+    // Create user if they don't exist
+    if (fetchError && fetchError.code === 'PGRST116') {
+      const { data: newUser, error: createError } = await supabase
+        .from('user_coins')
+        .insert({
+          guild_id: guildId,
+          user_id: userId,
+          coins: 0,
+          last_daily: null
+        })
+        .select('coins, last_daily')
+        .single();
+
+      if (createError) throw createError;
+      userData = newUser;
+    } else if (fetchError) {
+      throw fetchError;
+    }
+
+    // Check if user can claim today (4 AM WAT reset)
+    const now = new Date();
+    const today = new Date();
+    today.setHours(4, 0, 0, 0); // 4:00 AM today
+
+    // If it's before 4 AM, use yesterday's 4 AM as the reset point
+    if (now.getHours() < 4) {
+      today.setDate(today.getDate() - 1);
+    }
+
+    // Check if user has already claimed today
+    if (userData.last_daily) {
+      const lastDaily = new Date(userData.last_daily);
+      if (lastDaily > today) {
+        return {
+          success: false,
+          alreadyClaimed: true,
+          newBalance: userData.coins,
+          nextResetTime: new Date(today.getTime() + 24 * 60 * 60 * 1000) // Next 4 AM
+        };
+      }
+    }
+
+    // Add coins and update last_daily
+    const newBalance = Math.max(0, userData.coins + dailyAmount);
+    
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('user_coins')
+      .update({
+        coins: newBalance,
+        last_daily: new Date().toISOString()
+      })
+      .eq('guild_id', guildId)
+      .eq('user_id', userId)
+      .select('coins')
+      .single();
+
+    if (updateError) throw updateError;
+
+    return {
+      success: true,
+      newBalance: updatedUser.coins,
+      amountClaimed: dailyAmount
+    };
+
+  } catch (error) {
+    console.error('Error claiming daily coins:', error);
+    return {
+      success: false,
+      error: error.message,
+      newBalance: await getUserCoins(guildId, userId)
+    };
+  }
+}
+
 module.exports = {
   getUserCoins,
   updateUserCoins,
