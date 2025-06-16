@@ -17,6 +17,16 @@ module.exports = {
             const targetUser = interaction.options.getUser('user') || interaction.user;
             const guildId = interaction.guild?.id;
             
+            // Check if user can view other wallets (admin permission or own wallet)
+            const canViewOthers = interaction.member.permissions.has('Administrator');
+            
+            if (targetUser.id !== interaction.user.id && !canViewOthers) {
+                return await interaction.reply({
+                    content: '❌ You can only check your own wallet balance. Only administrators can check other users\' wallets.',
+                    ephemeral: true
+                });
+            }
+            
             // Validate guild context
             if (!guildId) {
                 return await interaction.reply({
@@ -45,8 +55,9 @@ module.exports = {
                     iconURL: interaction.guild.iconURL({ dynamic: true }) 
                 });
             
-            // Add additional info if checking own wallet
+            // Add additional info based on context
             if (targetUser.id === interaction.user.id) {
+                // User checking own wallet
                 embed.addFields([
                     {
                         name: '💡 Tips',
@@ -55,11 +66,11 @@ module.exports = {
                     }
                 ]);
             } else {
-                // Add a field showing who requested this info
+                // Admin checking another user's wallet
                 embed.addFields([
                     {
                         name: '👤 Requested by',
-                        value: interaction.user.username,
+                        value: `${interaction.user.username} (Administrator)`,
                         inline: true
                     }
                 ]);
@@ -67,7 +78,7 @@ module.exports = {
             
             await interaction.reply({
                 embeds: [embed],
-                ephemeral: targetUser.id === interaction.user.id // Private if checking own wallet, public if checking others
+                ephemeral: true // Always private to protect user privacy
             });
             
         } catch (error) {
