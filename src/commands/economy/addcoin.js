@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { supabase } = require('../../database/database');  // Fixed path to match src/database/database.js
+const supabase = require('../../database/database');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -9,6 +9,12 @@ module.exports = {
 		.addUserOption(option => option.setName('target').setDescription('The user to add coins to').setRequired(true))
 		.addIntegerOption(option => option.setName('amount').setDescription('The amount of coins to add').setRequired(true)),
 	async execute(interaction) {
+		// Add debug logging to check if supabase is defined
+		if (!supabase) {
+			console.error('Supabase client is undefined');
+			return interaction.reply({ content: 'Database connection error.', ephemeral: true });
+		}
+
 		const targetUser = interaction.options.getUser('target');
 		const amount = interaction.options.getInteger('amount');
 
@@ -16,31 +22,43 @@ module.exports = {
 			return interaction.reply({ content: 'Please provide a valid user and amount of coins.', ephemeral: true });
 		}
 
-		const { data: userData, error: fetchError } = await supabase
-			.from('user_coins')
-			.select('coins')
-			.eq('user_id', targetUser.id)
-			.single();
+		try {
+			const { data: userData, error: fetchError } = await supabase
+				.from('user_coins')
+				.select('coins')
+				.eq('user_id', targetUser.id)
+				.single();
 
-		if (fetchError) {
-			return interaction.reply({ content: `Error fetching user data: ${fetchError.message}`, ephemeral: true });
-		}
+			if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+				console.error('Fetch error:', fetchError);
+				return interaction.reply({ content: `Error fetching user data: ${fetchError.message}`, ephemeral: true });
+			}
 
-		const newBalance = (userData?.coins || 0) + amount;
+			const currentCoins = userData?.coins || 0;
+			const newBalance = currentCoins + amount;
 
-		const { error: upsertError } = await supabase
-			.from('user_coins')
-			.upsert({
-				guild_id: interaction.guild.id,
-				user_id: targetUser.id,
-				coins: newBalance,
-				username: targetUser.username
+			const { error: upsertError } = await supabase
+				.from('user_coins')
+				.upsert({
+					guild_id: interaction.guild.id,
+					user_id: targetUser.id,
+					coins: newBalance,
+					username: targetUser.username
+				});
+
+			if (upsertError) {
+				console.error('Upsert error:', upsertError);
+				return interaction.reply({ content: `Error updating user coins: ${upsertError.message}`, ephemeral: true });
+			}
+
+			return interaction.reply({ 
+				content: `Successfully added ${amount} coins to ${targetUser.username}. New balance: ${newBalance} coins.`, 
+				ephemeral: true 
 			});
 
-		if (upsertError) {
-			return interaction.reply({ content: `Error updating user coins: ${upsertError.message}`, ephemeral: true });
+		} catch (error) {
+			console.error('Command execution error:', error);
+			return interaction.reply({ content: 'An unexpected error occurred.', ephemeral: true });
 		}
-
-		return interaction.reply({ content: `Successfully added ${amount} coins to ${targetUser.username}. New balance: ${newBalance} coins.`, ephemeral: true });
 	},
 };
