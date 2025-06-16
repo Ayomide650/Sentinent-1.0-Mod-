@@ -12,6 +12,7 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = requir
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+const express = require('express');
 
 // Import leveling system
 const { createClient } = require('@supabase/supabase-js');
@@ -65,7 +66,7 @@ async function testSupabaseConnection() {
 }
 
 // --- Express server for Render port binding and health checks ---
-const app = require('express')();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
