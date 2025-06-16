@@ -73,8 +73,12 @@ module.exports = {
                 });
             }
 
-            // Check coins for both players
+            // Check user's coins
+            console.log("guildId:", interaction.guild?.id);
+            console.log("userId:", challenger.id);
             const challengerCoins = await getUserCoins(challenger.id);
+            console.log("guildId:", interaction.guild?.id);
+            console.log("userId:", opponent.id);
             const opponentCoins = await getUserCoins(opponent.id);
 
             if (challengerCoins < amount) {
