@@ -33,6 +33,7 @@ module.exports = {
             const amount = interaction.options.getInteger('amount');
             const rounds = interaction.options.getInteger('rounds');
             const challenger = interaction.user;
+            const guildId = interaction.guild?.id; // Get the guild ID
 
             // Basic validation
             if (opponent.id === challenger.id) {
@@ -73,13 +74,13 @@ module.exports = {
                 });
             }
 
-            // Check user's coins
-            console.log("guildId:", interaction.guild?.id);
-            console.log("userId:", challenger.id);
-            const challengerCoins = await getUserCoins(challenger.id);
-            console.log("guildId:", interaction.guild?.id);
-            console.log("userId:", opponent.id);
-            const opponentCoins = await getUserCoins(opponent.id);
+            // Check user's coins - FIXED: Pass both guildId and userId
+            console.log("guildId:", guildId);
+            console.log("challengerId:", challenger.id);
+            const challengerCoins = await getUserCoins(guildId, challenger.id);
+            console.log("guildId:", guildId);
+            console.log("opponentId:", opponent.id);
+            const opponentCoins = await getUserCoins(guildId, opponent.id);
 
             if (challengerCoins < amount) {
                 return await interaction.reply({
@@ -102,6 +103,7 @@ module.exports = {
                 opponentId: opponent.id,
                 amount: amount,
                 rounds: rounds,
+                guildId: guildId, // Store guildId for use in accept/reject commands
                 createdAt: Date.now()
             });
 
@@ -144,16 +146,20 @@ module.exports = {
 
             const errorMessage = '❌ An error occurred while creating the dice battle challenge. Please try again later.';
             
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ 
-                    content: errorMessage, 
-                    ephemeral: true 
-                });
-            } else {
-                await interaction.reply({ 
-                    content: errorMessage, 
-                    ephemeral: true 
-                });
+            try {
+                if (interaction.replied || interaction.deferred) {
+                    await interaction.followUp({ 
+                        content: errorMessage, 
+                        ephemeral: true 
+                    });
+                } else {
+                    await interaction.reply({ 
+                        content: errorMessage, 
+                        ephemeral: true 
+                    });
+                }
+            } catch (replyError) {
+                console.error('Error sending error message:', replyError);
             }
         }
     },
