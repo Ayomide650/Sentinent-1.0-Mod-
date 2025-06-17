@@ -8,6 +8,15 @@ module.exports = {
     
     async execute(interaction) {
         try {
+            // Get guild ID for coin operations
+            const guildId = interaction.guild?.id;
+            if (!guildId) {
+                return await interaction.reply({
+                    content: '❌ This command can only be used in a server!',
+                    ephemeral: true
+                });
+            }
+
             // Import activeGames from dicebattle module
             const { activeGames } = require('./dicebattle');
             
@@ -29,8 +38,8 @@ module.exports = {
             }
 
             // Validate that both players have enough coins
-            const challengerCoins = await getUserCoins(game.challenger);
-            const accepterCoins = await getUserCoins(interaction.user.id);
+            const challengerCoins = await getUserCoins(guildId, game.challenger);
+            const accepterCoins = await getUserCoins(guildId, interaction.user.id);
 
             if (challengerCoins < game.amount) {
                 activeGames.delete(interaction.user.id);
@@ -105,13 +114,13 @@ module.exports = {
             const loser = p1Score > p2Score ? interaction.user.id : game.challenger;
             const winnerName = p1Score > p2Score ? 'challenger' : 'accepter';
 
-            // Update coins
-            await updateUserCoins(winner, game.amount);
-            await updateUserCoins(loser, -game.amount);
+            // Update coins with guildId parameter
+            await updateUserCoins(guildId, winner, game.amount);
+            await updateUserCoins(guildId, loser, -game.amount);
 
             // Get updated balances
-            const winnerNewBalance = await getUserCoins(winner);
-            const loserNewBalance = await getUserCoins(loser);
+            const winnerNewBalance = await getUserCoins(guildId, winner);
+            const loserNewBalance = await getUserCoins(guildId, loser);
 
             // Remove the game from active games
             activeGames.delete(interaction.user.id);
@@ -142,16 +151,20 @@ module.exports = {
 
             const errorMessage = '❌ An error occurred during the dice battle. The challenge has been cancelled.';
             
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ 
-                    content: errorMessage, 
-                    ephemeral: true 
-                });
-            } else {
-                await interaction.reply({ 
-                    content: errorMessage, 
-                    ephemeral: true 
-                });
+            try {
+                if (interaction.replied || interaction.deferred) {
+                    await interaction.followUp({ 
+                        content: errorMessage, 
+                        ephemeral: true 
+                    });
+                } else {
+                    await interaction.reply({ 
+                        content: errorMessage, 
+                        ephemeral: true 
+                    });
+                }
+            } catch (replyError) {
+                console.error('Error sending error message:', replyError);
             }
         }
     }
