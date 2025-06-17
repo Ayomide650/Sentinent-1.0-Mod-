@@ -34,6 +34,7 @@ module.exports = {
             const amount = interaction.options.getInteger('amount');
             const choice = interaction.options.getString('choice');
             const userId = interaction.user.id;
+            const guildId = interaction.guild?.id; // Get the guild ID
 
             // Input validation
             if (amount <= 0) {
@@ -43,10 +44,10 @@ module.exports = {
                 });
             }
 
-            // Get user's current coins
-            console.log("guildId:", interaction.guild?.id);
+            // Get user's current coins - FIXED: Pass both guildId and userId
+            console.log("guildId:", guildId);
             console.log("userId:", userId);
-            const userCoins = await getUserCoins(userId);
+            const userCoins = await getUserCoins(guildId, userId);
             
             if (userCoins < amount) {
                 return await interaction.reply({ 
@@ -62,13 +63,13 @@ module.exports = {
             // Calculate coin change
             const changeAmount = won ? amount : -amount;
             
-            // Update user's coins
-            await updateUserCoins(userId, changeAmount);
+            // Update user's coins - FIXED: Pass both guildId and userId
+            await updateUserCoins(guildId, userId, changeAmount);
             
-            // Get updated coin balance
-            console.log("guildId:", interaction.guild?.id);
+            // Get updated coin balance - FIXED: Pass both guildId and userId
+            console.log("guildId:", guildId);
             console.log("userId:", userId);
-            const newBalance = await getUserCoins(userId);
+            const newBalance = await getUserCoins(guildId, userId);
 
             // Create result message
             const resultEmoji = result === 'heads' ? '🪙' : '🎯';
