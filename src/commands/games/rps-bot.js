@@ -23,16 +23,32 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
-    const guildId = interaction.guild.id;
+    const guildId = interaction.guild?.id;
     const bet = interaction.options.getInteger('bet');
     const rounds = interaction.options.getInteger('rounds') || 3;
 
     try {
+      // Channel restriction check
+      if (interaction.channel?.name !== 'game-channel') {
+        return await interaction.reply({ 
+          content: '🚫 This command can only be used in the #game-channel!',
+          ephemeral: true 
+        });
+      }
+
       // Check if user already has an active game
       if (activeBotGames.has(userId)) {
         return await interaction.reply({
           content: '❌ You already have an active game! Finish it first.',
           ephemeral: true
+        });
+      }
+
+      // Input validation
+      if (bet <= 0) {
+        return await interaction.reply({ 
+          content: '❌ Bet amount must be greater than 0!',
+          ephemeral: true 
         });
       }
 
@@ -90,16 +106,18 @@ module.exports = {
         .setFooter({ text: `Player: ${interaction.user.username}` })
         .setTimestamp();
 
+      // Reply with ephemeral embed
       await interaction.reply({
         embeds: [embed],
-        components: [buttons]
+        components: [buttons],
+        ephemeral: true
       });
 
       // Set a timeout to clean up inactive games (5 minutes)
       setTimeout(() => {
         if (activeBotGames.has(userId)) {
           activeBotGames.delete(userId);
-          // Optionally refund the bet if the game times out
+          // Refund the bet if the game times out
           updateUserCoins(guildId, userId, bet).catch(console.error);
         }
       }, 5 * 60 * 1000); // 5 minutes
