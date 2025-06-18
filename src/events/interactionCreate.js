@@ -17,15 +17,23 @@ module.exports = {
         await command.execute(interaction);
       } catch (error) {
         console.error('Error executing command:', error);
-        const reply = {
+        
+        // Improved error handling
+        const errorMessage = {
           content: 'There was an error while executing this command!',
           ephemeral: true
         };
         
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(reply);
-        } else {
-          await interaction.reply(reply);
+        try {
+          if (interaction.replied) {
+            await interaction.followUp(errorMessage);
+          } else if (interaction.deferred) {
+            await interaction.editReply(errorMessage);
+          } else {
+            await interaction.reply(errorMessage);
+          }
+        } catch (replyError) {
+          console.error('Failed to send error message:', replyError);
         }
       }
     }
@@ -36,6 +44,7 @@ module.exports = {
         const messageContent = interaction.fields.getTextInputValue('messageContent');
         const channelId = interaction.fields.getTextInputValue('channelId');
         const mentionEveryone = interaction.fields.getTextInputValue('mentionEveryone').toLowerCase() === 'yes';
+        
         const channel = await interaction.guild.channels.fetch(channelId);
         if (!channel) {
           return await interaction.reply({
@@ -43,18 +52,31 @@ module.exports = {
             ephemeral: true
           });
         }
+        
         const finalMessage = mentionEveryone ? `@everyone\n${messageContent}` : messageContent;
         await channel.send(finalMessage);
+        
         await interaction.reply({
           content: 'Message sent successfully!',
           ephemeral: true
         });
       } catch (error) {
         console.error('Error handling modal submission:', error);
-        await interaction.reply({
+        
+        const errorMessage = {
           content: 'Failed to send message. Please check the channel ID and try again.',
           ephemeral: true
-        });
+        };
+        
+        try {
+          if (interaction.replied) {
+            await interaction.followUp(errorMessage);
+          } else {
+            await interaction.reply(errorMessage);
+          }
+        } catch (replyError) {
+          console.error('Failed to send error message:', replyError);
+        }
       }
     }
 
@@ -86,7 +108,6 @@ async function handleBotGameButton(interaction) {
       });
     }
 
-    // Fixed import path to match your structure
     const { activeBotGames } = require('../commands/games/rps-bot');
     const game = activeBotGames.get(userId);
 
@@ -101,14 +122,14 @@ async function handleBotGameButton(interaction) {
     const choices = ['rock', 'paper', 'scissors'];
     const botChoice = choices[Math.floor(Math.random() * 3)];
     
-    // Determine winner - fixed the function call
+    // Determine winner
     const result = determineWinner(choice, botChoice);
     let roundResult = '';
     
-    if (result === 'player') {
+    if (result === 'player1') {
       game.playerWins++;
       roundResult = '🎉 You won this round!';
-    } else if (result === 'bot') {
+    } else if (result === 'player2') {
       game.botWins++;
       roundResult = '🤖 Bot won this round!';
     } else {
@@ -156,7 +177,7 @@ async function handleBotGameButton(interaction) {
 
       activeBotGames.delete(userId);
 
-      // Send ephemeral response
+      // Update the interaction
       await interaction.update({
         embeds: [embed],
         components: []
@@ -164,11 +185,15 @@ async function handleBotGameButton(interaction) {
 
       // Send public message only if player won
       if (wonGame) {
-        const publicMessage = `🎉 ${interaction.user} defeated the bot in Rock Paper Scissors and won **${game.totalBet}** coins! (${game.playerWins}-${game.botWins})`;
-        await interaction.followUp({ 
-          content: publicMessage,
-          ephemeral: false 
-        });
+        try {
+          const publicMessage = `🎉 ${interaction.user} defeated the bot in Rock Paper Scissors and won **${game.totalBet}** coins! (${game.playerWins}-${game.botWins})`;
+          await interaction.followUp({ 
+            content: publicMessage,
+            ephemeral: false 
+          });
+        } catch (followUpError) {
+          console.error('Failed to send public message:', followUpError);
+        }
       }
 
     } else {
@@ -202,15 +227,16 @@ async function handleBotGameButton(interaction) {
   } catch (error) {
     console.error('Error in bot game button:', error);
     
-    // Safe error response
     const errorMessage = {
       content: '❌ An error occurred!',
       ephemeral: true
     };
 
     try {
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.replied) {
         await interaction.followUp(errorMessage);
+      } else if (interaction.deferred) {
+        await interaction.editReply(errorMessage);
       } else {
         await interaction.reply(errorMessage);
       }
@@ -280,8 +306,10 @@ async function handlePvpGameButton(interaction) {
     };
 
     try {
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.replied) {
         await interaction.followUp(errorMessage);
+      } else if (interaction.deferred) {
+        await interaction.editReply(errorMessage);
       } else {
         await interaction.reply(errorMessage);
       }
@@ -347,7 +375,9 @@ async function resolveRound(interaction, game) {
         
         activePlayerGames.delete(game.gameId);
         
-        await interaction.editReply({
+        // Get the original message to edit
+        const originalMessage = await interaction.channel.messages.fetch(game.messageId);
+        await originalMessage.edit({
           embeds: [embed],
           components: []
         });
@@ -371,7 +401,9 @@ async function resolveRound(interaction, game) {
 
       activePlayerGames.delete(game.gameId);
 
-      await interaction.editReply({
+      // Get the original message to edit
+      const originalMessage = await interaction.channel.messages.fetch(game.messageId);
+      await originalMessage.edit({
         embeds: [embed],
         components: []
       });
@@ -399,7 +431,9 @@ async function resolveRound(interaction, game) {
 
       embed.setDescription(embed.data.description + `\n\n**Round ${game.currentRound}/${game.rounds}**\nBoth players choose your moves:`);
 
-      await interaction.editReply({
+      // Get the original message to edit
+      const originalMessage = await interaction.channel.messages.fetch(game.messageId);
+      await originalMessage.edit({
         embeds: [embed],
         components: [buttons]
       });
@@ -414,8 +448,10 @@ async function resolveRound(interaction, game) {
     };
 
     try {
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.replied) {
         await interaction.followUp(errorMessage);
+      } else if (interaction.deferred) {
+        await interaction.editReply(errorMessage);
       } else {
         await interaction.reply(errorMessage);
       }
@@ -435,11 +471,7 @@ function determineWinner(choice1, choice2) {
     'scissors': 'paper'
   };
   
-  if (wins[choice1] === choice2) {
-    return 'player1'; // Also returns 'player' for bot games when called with bot choice as choice2
-  } else {
-    return 'player2'; // Also returns 'bot' for bot games when called with bot choice as choice2
-  }
+  return wins[choice1] === choice2 ? 'player1' : 'player2';
 }
 
 // Helper function to get emoji for choices
