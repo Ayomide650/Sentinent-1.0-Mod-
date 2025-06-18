@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getUserCoins, updateUserCoins } = require('../utils/coinUtils');
+const { getUserCoins, updateUserCoins } = require('../../utils/coinUtils');
 
 // Store active bot games
 const activeBotGames = new Map();
