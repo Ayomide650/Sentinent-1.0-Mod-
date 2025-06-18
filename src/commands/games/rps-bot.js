@@ -22,12 +22,12 @@ module.exports = {
         .setMaxValue(10)),
 
   async execute(interaction) {
-    try {
-      const userId = interaction.user.id;
-      const guildId = interaction.guild.id;
-      const bet = interaction.options.getInteger('bet');
-      const rounds = interaction.options.getInteger('rounds') || 3;
+    const userId = interaction.user.id;
+    const guildId = interaction.guild.id;
+    const bet = interaction.options.getInteger('bet');
+    const rounds = interaction.options.getInteger('rounds') || 3;
 
+    try {
       // Check if user already has an active game
       if (activeBotGames.has(userId)) {
         return await interaction.reply({
@@ -107,17 +107,30 @@ module.exports = {
     } catch (error) {
       console.error('Error in rps-bot command:', error);
       
-      // If there was an error after deducting coins, try to refund
-      if (activeBotGames.has(interaction.user.id)) {
-        const gameData = activeBotGames.get(interaction.user.id);
-        activeBotGames.delete(interaction.user.id);
-        await updateUserCoins(gameData.guildId, gameData.userId, gameData.totalBet).catch(console.error);
+      // Clean up game data if it exists
+      if (activeBotGames.has(userId)) {
+        const gameData = activeBotGames.get(userId);
+        activeBotGames.delete(userId);
+        // Refund the bet
+        updateUserCoins(gameData.guildId, gameData.userId, gameData.totalBet).catch(console.error);
       }
 
-      await interaction.reply({
+      // Safe error response - check if we can still reply
+      const errorMessage = {
         content: '❌ An error occurred while starting the game. Please try again.',
         ephemeral: true
-      }).catch(console.error);
+      };
+
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      } catch (replyError) {
+        console.error('Failed to send error message:', replyError);
+        // If we can't reply, at least log the original error
+      }
     }
   }
 };
