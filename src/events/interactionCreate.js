@@ -130,10 +130,12 @@ async function handleBotGameButton(interaction) {
       // Game finished
       let finalResult = '';
       let winnings = 0;
+      let wonGame = false;
 
       if (game.playerWins > game.botWins) {
         finalResult = '🎉 **You won the game!**';
         winnings = game.totalBet * 2;
+        wonGame = true;
         await updateUserCoins(game.guildId, userId, winnings);
       } else if (game.botWins > game.playerWins) {
         finalResult = '💀 **Bot won the game!**';
@@ -154,10 +156,21 @@ async function handleBotGameButton(interaction) {
 
       activeBotGames.delete(userId);
 
+      // Send ephemeral response
       await interaction.update({
         embeds: [embed],
         components: []
       });
+
+      // Send public message only if player won
+      if (wonGame) {
+        const publicMessage = `🎉 ${interaction.user} defeated the bot in Rock Paper Scissors and won **${game.totalBet}** coins! (${game.playerWins}-${game.botWins})`;
+        await interaction.followUp({ 
+          content: publicMessage,
+          ephemeral: false 
+        });
+      }
+
     } else {
       // Continue to next round
       game.currentRound++;
@@ -188,10 +201,22 @@ async function handleBotGameButton(interaction) {
 
   } catch (error) {
     console.error('Error in bot game button:', error);
-    await interaction.reply({
+    
+    // Safe error response
+    const errorMessage = {
       content: '❌ An error occurred!',
       ephemeral: true
-    }).catch(console.error);
+    };
+
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(errorMessage);
+      } else {
+        await interaction.reply(errorMessage);
+      }
+    } catch (replyError) {
+      console.error('Failed to send error message:', replyError);
+    }
   }
 }
 
@@ -248,10 +273,21 @@ async function handlePvpGameButton(interaction) {
 
   } catch (error) {
     console.error('Error in PvP game button:', error);
-    await interaction.followUp({
+    
+    const errorMessage = {
       content: '❌ An error occurred!',
       ephemeral: true
-    }).catch(console.error);
+    };
+
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(errorMessage);
+      } else {
+        await interaction.reply(errorMessage);
+      }
+    } catch (replyError) {
+      console.error('Failed to send error message:', replyError);
+    }
   }
 }
 
@@ -371,10 +407,21 @@ async function resolveRound(interaction, game) {
 
   } catch (error) {
     console.error('Error resolving round:', error);
-    await interaction.followUp({
+    
+    const errorMessage = {
       content: '❌ An error occurred while resolving the round!',
       ephemeral: true
-    }).catch(console.error);
+    };
+
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(errorMessage);
+      } else {
+        await interaction.reply(errorMessage);
+      }
+    } catch (replyError) {
+      console.error('Failed to send error message:', replyError);
+    }
   }
 }
 
