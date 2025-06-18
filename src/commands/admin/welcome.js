@@ -19,6 +19,9 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
+    // Acknowledge the interaction immediately to prevent timeout
+    await interaction.deferReply({ ephemeral: true });
+
     try {
       const channel = interaction.options.getChannel('channel');
       const message = interaction.options.getString('message');
@@ -26,9 +29,8 @@ module.exports = {
 
       // Validate channel type
       if (channel.type !== ChannelType.GuildText) {
-        return await interaction.reply({
-          content: '❌ Please select a text channel only.',
-          ephemeral: true
+        return await interaction.editReply({
+          content: '❌ Please select a text channel only.'
         });
       }
 
@@ -37,9 +39,8 @@ module.exports = {
       const permissions = channel.permissionsFor(botMember);
       
       if (!permissions.has(['ViewChannel', 'SendMessages'])) {
-        return await interaction.reply({
-          content: '❌ I don\'t have permission to send messages in that channel.',
-          ephemeral: true
+        return await interaction.editReply({
+          content: '❌ I don\'t have permission to send messages in that channel.'
         });
       }
 
@@ -58,9 +59,8 @@ module.exports = {
 
       if (error) {
         console.error('Database error:', error);
-        return await interaction.reply({
-          content: '❌ Failed to save welcome configuration. Please try again.',
-          ephemeral: true
+        return await interaction.editReply({
+          content: '❌ Failed to save welcome configuration. Please try again.'
         });
       }
 
@@ -70,7 +70,7 @@ module.exports = {
         .replace(/{server}/g, interaction.guild.name)
         .replace(/{memberCount}/g, interaction.guild.memberCount.toString());
 
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [{
           color: 0x00ff00,
           title: '✅ Welcome System Configured',
@@ -94,16 +94,27 @@ module.exports = {
           footer: {
             text: 'Use placeholders: {user}, {server}, {memberCount}'
           }
-        }],
-        ephemeral: true
+        }]
       });
 
     } catch (error) {
       console.error('Welcome command error:', error);
-      await interaction.reply({
-        content: '❌ An error occurred while configuring the welcome system.',
-        ephemeral: true
-      });
+      
+      // Safe error handling - check if we can still respond
+      try {
+        if (interaction.deferred && !interaction.replied) {
+          await interaction.editReply({
+            content: '❌ An error occurred while configuring the welcome system.'
+          });
+        } else if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: '❌ An error occurred while configuring the welcome system.',
+            ephemeral: true
+          });
+        }
+      } catch (replyError) {
+        console.error('❌ Error executing welcome:', replyError);
+      }
     }
   }
 };
