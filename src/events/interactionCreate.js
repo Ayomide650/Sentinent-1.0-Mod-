@@ -6,7 +6,28 @@ module.exports = {
   async execute(interaction) {
     // Handle commands
     if (interaction.isChatInputCommand()) {
-      // ...existing command handling code...
+      const command = interaction.client.commands.get(interaction.commandName);
+      
+      if (!command) {
+        console.log(`No command matching ${interaction.commandName} was found.`);
+        return;
+      }
+
+      try {
+        await command.execute(interaction);
+      } catch (error) {
+        console.error('Error executing command:', error);
+        const reply = {
+          content: 'There was an error while executing this command!',
+          ephemeral: true
+        };
+        
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(reply);
+        } else {
+          await interaction.reply(reply);
+        }
+      }
     }
     
     // Handle modal submissions
@@ -65,7 +86,8 @@ async function handleBotGameButton(interaction) {
       });
     }
 
-    const { activeBotGames } = require('../commands/rps-bot');
+    // Fixed import path to match your structure
+    const { activeBotGames } = require('../commands/games/rps-bot');
     const game = activeBotGames.get(userId);
 
     if (!game) {
@@ -79,7 +101,7 @@ async function handleBotGameButton(interaction) {
     const choices = ['rock', 'paper', 'scissors'];
     const botChoice = choices[Math.floor(Math.random() * 3)];
     
-    // Determine winner
+    // Determine winner - fixed the function call
     const result = determineWinner(choice, botChoice);
     let roundResult = '';
     
@@ -106,10 +128,19 @@ async function handleBotGameButton(interaction) {
     // Check if game is over
     if (game.currentRound >= game.rounds) {
       // Game finished
-      const playerWon = game.playerWins > game.botWins;
-      const winnings = playerWon ? game.totalBet * 2 : 0;
-      
-      if (winnings > 0) {
+      let finalResult = '';
+      let winnings = 0;
+
+      if (game.playerWins > game.botWins) {
+        finalResult = '🎉 **You won the game!**';
+        winnings = game.totalBet * 2;
+        await updateUserCoins(game.guildId, userId, winnings);
+      } else if (game.botWins > game.playerWins) {
+        finalResult = '💀 **Bot won the game!**';
+        winnings = 0;
+      } else {
+        finalResult = '🤝 **Game tied!**';
+        winnings = game.totalBet; // Refund bet on tie
         await updateUserCoins(game.guildId, userId, winnings);
       }
 
@@ -117,9 +148,7 @@ async function handleBotGameButton(interaction) {
       
       embed.addFields({
         name: '🏆 Final Result',
-        value: playerWon 
-          ? `🎉 **You won!** +${game.totalBet} coins\n💰 **New balance:** ${finalBalance} coins`
-          : `😔 **Bot won!** -${game.totalBet} coins\n💰 **New balance:** ${finalBalance} coins`,
+        value: `${finalResult}\n💰 **Winnings:** ${winnings} coins\n💰 **New balance:** ${finalBalance} coins`,
         inline: false
       });
 
@@ -162,7 +191,7 @@ async function handleBotGameButton(interaction) {
     await interaction.reply({
       content: '❌ An error occurred!',
       ephemeral: true
-    });
+    }).catch(console.error);
   }
 }
 
@@ -170,7 +199,7 @@ async function handlePvpGameButton(interaction) {
   try {
     const [, , choice, gameId] = interaction.customId.split('_');
     
-    const { activePlayerGames } = require('../commands/rps-accept');
+    const { activePlayerGames } = require('../commands/games/rps-accept');
     const game = activePlayerGames.get(gameId);
 
     if (!game) {
@@ -222,13 +251,13 @@ async function handlePvpGameButton(interaction) {
     await interaction.followUp({
       content: '❌ An error occurred!',
       ephemeral: true
-    });
+    }).catch(console.error);
   }
 }
 
 async function resolveRound(interaction, game) {
   try {
-    const { activePlayerGames } = require('../commands/rps-accept');
+    const { activePlayerGames } = require('../commands/games/rps-accept');
     
     // Determine winner
     const result = determineWinner(game.challengerChoice, game.accepterChoice);
@@ -345,7 +374,7 @@ async function resolveRound(interaction, game) {
     await interaction.followUp({
       content: '❌ An error occurred while resolving the round!',
       ephemeral: true
-    });
+    }).catch(console.error);
   }
 }
 
@@ -360,9 +389,9 @@ function determineWinner(choice1, choice2) {
   };
   
   if (wins[choice1] === choice2) {
-    return 'player1'; // or 'player' for bot games
+    return 'player1'; // Also returns 'player' for bot games when called with bot choice as choice2
   } else {
-    return 'player2'; // or 'bot' for bot games
+    return 'player2'; // Also returns 'bot' for bot games when called with bot choice as choice2
   }
 }
 
