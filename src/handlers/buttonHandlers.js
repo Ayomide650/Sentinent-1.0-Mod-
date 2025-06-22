@@ -38,23 +38,28 @@ async function handle(interaction) {
 
 async function handleBotGameButton(interaction) {
   try {
+    // DEFER THE INTERACTION IMMEDIATELY for database operations
+    await interaction.deferUpdate();
+
     const [, , choice, userId] = interaction.customId.split('_');
     
     if (interaction.user.id !== userId) {
-      return await interaction.reply({
+      await interaction.followUp({
         content: '❌ This is not your game!',
         ephemeral: true
       });
+      return;
     }
 
     const { activeBotGames } = require('../commands/games/rps-bot');
     const game = activeBotGames.get(userId);
 
     if (!game) {
-      return await interaction.reply({
+      await interaction.followUp({
         content: '❌ Game not found or expired!',
         ephemeral: true
       });
+      return;
     }
 
     // Bot makes random choice
@@ -87,7 +92,7 @@ async function handleBotGameButton(interaction) {
 
     // Check if game is over
     if (game.currentRound >= game.rounds) {
-      // Game finished - handle final result
+      // Game finished - handle final result with timeout protection
       let finalResult = '';
       let winnings = 0;
       let wonGame = false;
@@ -96,17 +101,37 @@ async function handleBotGameButton(interaction) {
         finalResult = '🎉 **You won the game!**';
         winnings = game.totalBet * 2;
         wonGame = true;
-        await updateUserCoins(game.guildId, userId, winnings);
+        
+        // Database operation with timeout protection
+        await Promise.race([
+          updateUserCoins(game.guildId, userId, winnings),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Database timeout')), 8000)
+          )
+        ]);
       } else if (game.botWins > game.playerWins) {
         finalResult = '💀 **Bot won the game!**';
         winnings = 0;
       } else {
         finalResult = '🤝 **Game tied!**';
         winnings = game.totalBet;
-        await updateUserCoins(game.guildId, userId, winnings);
+        
+        // Database operation with timeout protection
+        await Promise.race([
+          updateUserCoins(game.guildId, userId, winnings),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Database timeout')), 8000)
+          )
+        ]);
       }
 
-      const finalBalance = await getUserCoins(game.guildId, userId);
+      // Get final balance with timeout protection
+      const finalBalance = await Promise.race([
+        getUserCoins(game.guildId, userId),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database timeout')), 8000)
+        )
+      ]);
       
       embed.addFields({
         name: '🏆 Final Result',
@@ -116,11 +141,13 @@ async function handleBotGameButton(interaction) {
 
       activeBotGames.delete(userId);
 
-      await interaction.update({
+      // Use editReply since we deferred
+      await interaction.editReply({
         embeds: [embed],
         components: []
       });
 
+      // Send public message if won
       if (wonGame) {
         try {
           const publicMessage = `🎉 ${interaction.user} defeated the bot in Rock Paper Scissors and won **${game.totalBet}** coins! (${game.playerWins}-${game.botWins})`;
@@ -155,7 +182,8 @@ async function handleBotGameButton(interaction) {
 
       embed.setDescription(embed.data.description + `\n\n**Round ${game.currentRound}/${game.rounds}**\nChoose your next move:`);
 
-      await interaction.update({
+      // Use editReply since we deferred
+      await interaction.editReply({
         embeds: [embed],
         components: [buttons]
       });
@@ -166,11 +194,13 @@ async function handleBotGameButton(interaction) {
     
     try {
       const errorMessage = {
-        content: '❌ An error occurred!',
+        content: '❌ An error occurred during the game!',
         ephemeral: true
       };
 
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.deferred) {
+        await interaction.editReply(errorMessage);
+      } else if (interaction.replied) {
         await interaction.followUp(errorMessage);
       } else {
         await interaction.reply(errorMessage);
@@ -182,34 +212,43 @@ async function handleBotGameButton(interaction) {
 }
 
 async function handlePvpGameButton(interaction) {
-  // Move your existing PvP logic here from the original file
-  // I'll keep it short for now, but you can copy the full implementation
   try {
+    // DEFER THE INTERACTION IMMEDIATELY for database operations
+    await interaction.deferUpdate();
+
     const [, , choice, gameId] = interaction.customId.split('_');
     
     const { activePlayerGames } = require('../commands/games/rps-accept');
     const game = activePlayerGames.get(gameId);
 
     if (!game) {
-      return await interaction.reply({
+      await interaction.followUp({
         content: '❌ Game not found or expired!',
         ephemeral: true
       });
+      return;
     }
 
     // Your existing PvP logic here...
-    // (Copy the rest from your original file)
+    // Remember to:
+    // 1. Use Promise.race for database operations
+    // 2. Use interaction.editReply() instead of interaction.update()
+    // 3. Proper error handling
+
+    // Placeholder for now - implement your PvP logic following the same pattern
 
   } catch (error) {
     console.error('Error in PvP game button:', error);
     
     try {
       const errorMessage = {
-        content: '❌ An error occurred!',
+        content: '❌ An error occurred during the PvP game!',
         ephemeral: true
       };
 
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.deferred) {
+        await interaction.editReply(errorMessage);
+      } else if (interaction.replied) {
         await interaction.followUp(errorMessage);
       } else {
         await interaction.reply(errorMessage);
