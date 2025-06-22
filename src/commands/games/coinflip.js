@@ -25,35 +25,38 @@ module.exports = {
         try {
             // Channel restriction check
             if (interaction.channel?.name !== 'game-channel') {
-                return await interaction.reply({ 
+                await interaction.reply({ 
                     content: '🚫 This command can only be used in the #game-channel!',
                     ephemeral: true 
                 });
+                return; // FIXED: Just return, don't return the promise
             }
 
             const amount = interaction.options.getInteger('amount');
             const choice = interaction.options.getString('choice');
             const userId = interaction.user.id;
-            const guildId = interaction.guild?.id; // Get the guild ID
+            const guildId = interaction.guild?.id;
 
             // Input validation
             if (amount <= 0) {
-                return await interaction.reply({ 
+                await interaction.reply({ 
                     content: '❌ Bet amount must be greater than 0!',
                     ephemeral: true 
                 });
+                return; // FIXED: Just return, don't return the promise
             }
 
-            // Get user's current coins - FIXED: Pass both guildId and userId
+            // Get user's current coins
             console.log("guildId:", guildId);
             console.log("userId:", userId);
             const userCoins = await getUserCoins(guildId, userId);
             
             if (userCoins < amount) {
-                return await interaction.reply({ 
+                await interaction.reply({ 
                     content: `❌ You don't have enough coins! You have ${userCoins} coins but tried to bet ${amount}.`,
                     ephemeral: true 
                 });
+                return; // FIXED: Just return, don't return the promise
             }
 
             // Perform the coin flip
@@ -63,10 +66,10 @@ module.exports = {
             // Calculate coin change
             const changeAmount = won ? amount : -amount;
             
-            // Update user's coins - FIXED: Pass both guildId and userId
+            // Update user's coins
             await updateUserCoins(guildId, userId, changeAmount);
             
-            // Get updated coin balance - FIXED: Pass both guildId and userId
+            // Get updated coin balance
             console.log("guildId:", guildId);
             console.log("userId:", userId);
             const newBalance = await getUserCoins(guildId, userId);
