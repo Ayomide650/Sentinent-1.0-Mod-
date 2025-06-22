@@ -23,13 +23,15 @@ module.exports = {
     
     async execute(interaction) {
         try {
+            // IMMEDIATELY defer the interaction to prevent timeout
+            await interaction.deferReply({ ephemeral: true });
+
             // Channel restriction check
             if (interaction.channel?.name !== 'game-channel') {
-                await interaction.reply({ 
-                    content: '🚫 This command can only be used in the #game-channel!',
-                    ephemeral: true 
+                await interaction.editReply({ 
+                    content: '🚫 This command can only be used in the #game-channel!'
                 });
-                return; // FIXED: Just return, don't return the promise
+                return;
             }
 
             const amount = interaction.options.getInteger('amount');
@@ -39,24 +41,27 @@ module.exports = {
 
             // Input validation
             if (amount <= 0) {
-                await interaction.reply({ 
-                    content: '❌ Bet amount must be greater than 0!',
-                    ephemeral: true 
+                await interaction.editReply({ 
+                    content: '❌ Bet amount must be greater than 0!'
                 });
-                return; // FIXED: Just return, don't return the promise
+                return;
             }
 
-            // Get user's current coins
-            console.log("guildId:", guildId);
-            console.log("userId:", userId);
-            const userCoins = await getUserCoins(guildId, userId);
+            // Get user's current coins with timeout protection
+            console.log("Fetching coins for guildId:", guildId, "userId:", userId);
+            
+            const userCoins = await Promise.race([
+                getUserCoins(guildId, userId),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Database timeout')), 10000)
+                )
+            ]);
             
             if (userCoins < amount) {
-                await interaction.reply({ 
-                    content: `❌ You don't have enough coins! You have ${userCoins} coins but tried to bet ${amount}.`,
-                    ephemeral: true 
+                await interaction.editReply({ 
+                    content: `❌ You don't have enough coins! You have ${userCoins} coins but tried to bet ${amount}.`
                 });
-                return; // FIXED: Just return, don't return the promise
+                return;
             }
 
             // Perform the coin flip
@@ -66,13 +71,21 @@ module.exports = {
             // Calculate coin change
             const changeAmount = won ? amount : -amount;
             
-            // Update user's coins
-            await updateUserCoins(guildId, userId, changeAmount);
+            // Update user's coins with timeout protection
+            await Promise.race([
+                updateUserCoins(guildId, userId, changeAmount),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Database timeout')), 10000)
+                )
+            ]);
             
-            // Get updated coin balance
-            console.log("guildId:", guildId);
-            console.log("userId:", userId);
-            const newBalance = await getUserCoins(guildId, userId);
+            // Get updated coin balance with timeout protection
+            const newBalance = await Promise.race([
+                getUserCoins(guildId, userId),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Database timeout')), 10000)
+                )
+            ]);
 
             // Create result message
             const resultEmoji = result === 'heads' ? '🪙' : '🎯';
@@ -82,10 +95,9 @@ module.exports = {
                 `${outcomeEmoji} You ${won ? 'won' : 'lost'} **${Math.abs(changeAmount)}** coins!\n` +
                 `💰 Your new balance: **${newBalance}** coins`;
 
-            // Reply to the user
-            await interaction.reply({ 
-                content: resultMessage,
-                ephemeral: true 
+            // Edit the deferred reply
+            await interaction.editReply({ 
+                content: resultMessage
             });
 
             // Send public message
@@ -99,19 +111,24 @@ module.exports = {
         } catch (error) {
             console.error('Error in coinflip command:', error);
             
-            // Handle the error gracefully
-            const errorMessage = '❌ An error occurred while processing your coinflip. Please try again later.';
-            
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ 
-                    content: errorMessage, 
-                    ephemeral: true 
-                });
-            } else {
-                await interaction.reply({ 
-                    content: errorMessage, 
-                    ephemeral: true 
-                });
+            // Safe error handling - only try to respond if we can
+            try {
+                const errorMessage = '❌ An error occurred while processing your coinflip. Please try again later.';
+                
+                if (interaction.deferred) {
+                    // If we deferred, edit the reply
+                    await interaction.editReply({ content: errorMessage });
+                } else if (!interaction.replied) {
+                    // If we haven't replied yet, reply normally
+                    await interaction.reply({ 
+                        content: errorMessage, 
+                        ephemeral: true 
+                    });
+                }
+                // If interaction is already replied to, do nothing (don't cause more errors)
+            } catch (errorHandlingError) {
+                // If even error handling fails, just log it
+                console.error('Failed to send error message:', errorHandlingError);
             }
         }
     }
