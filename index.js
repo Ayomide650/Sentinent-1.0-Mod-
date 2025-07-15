@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 const express = require('express');
+const { keepAlive } = require('./server.js');
 
 // Import leveling system
 const { createClient } = require('@supabase/supabase-js');
@@ -64,45 +65,6 @@ async function testSupabaseConnection() {
     return false;
   }
 }
-
-// --- Express server for Render port binding and health checks ---
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json());
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'online',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// Bot status endpoint
-app.get('/bot-status', (req, res) => {
-  if (client.isReady()) {
-    res.json({
-      status: 'ready',
-      guilds: client.guilds.cache.size,
-      users: client.users.cache.size,
-      ping: client.ws.ping
-    });
-  } else {
-    res.json({ status: 'not ready' });
-  }
-});
-
-// Uptime endpoint
-app.get('/', (req, res) => {
-  const uptime = Math.round(client.uptime / 1000);
-  res.send(`Bot has been running for ${uptime} seconds`);
-});
-
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Health check server running on port ${PORT}`);
-});
 
 // --- Discord bot initialization ---
 const client = new Client({
