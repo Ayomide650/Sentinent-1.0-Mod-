@@ -549,8 +549,6 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-
-
 // --- Start the bot ---
 async function startBot() {
   try {
@@ -562,7 +560,11 @@ async function startBot() {
     console.log(`   - SUPABASE_KEY: ${SUPABASE_KEY ? '✅ Set' : '❌ Missing'}`);
     console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
     
-    // Load handlers first
+    // IMPORTANT: Start the web server FIRST (this fixes your Render deployment issue)
+    console.log('🌐 Starting web server...');
+    keepAlive(client);
+    
+    // Load handlers
     loadHandlers();
     
     // Login to Discord
