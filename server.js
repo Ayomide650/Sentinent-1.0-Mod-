@@ -1,7 +1,8 @@
 // server.js
-const express = require('express');
-require('dotenv').config();
+import express from 'express';
+import dotenv from 'dotenv';
 
+dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -21,9 +22,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Bot status endpoint (if you want to check bot status)
+// Bot status endpoint (optional)
 app.get('/bot-status', (req, res) => {
-  // This will be populated when client is passed to keepAlive
   if (global.discordClient && global.discordClient.isReady()) {
     res.json({
       status: 'ready',
@@ -36,7 +36,7 @@ app.get('/bot-status', (req, res) => {
   }
 });
 
-function keepAlive(client = null) {
+export function keepAlive(client = null) {
   // Store client reference globally for bot-status endpoint
   if (client) {
     global.discordClient = client;
@@ -55,9 +55,6 @@ function keepAlive(client = null) {
       try {
         // Get your Render app URL from environment or construct it
         const appUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-        
-        // Use node-fetch or built-in fetch (Node 18+)
-        const fetch = (await import('node-fetch')).default;
         const response = await fetch(`${appUrl}/health`);
         
         if (response.ok) {
@@ -71,7 +68,6 @@ function keepAlive(client = null) {
         
         // If external URL fails, try localhost as fallback
         try {
-          const fetch = (await import('node-fetch')).default;
           const response = await fetch(`http://localhost:${PORT}/health`);
           if (response.ok) {
             console.log(`✅ Self-ping successful (localhost fallback): ${response.status}`);
@@ -84,8 +80,6 @@ function keepAlive(client = null) {
     
     console.log(`🔄 Self-ping scheduled every ${PING_INTERVAL / 60000} minutes`);
   }, 2 * 60 * 1000); // 2 minute delay
-
+  
   return server;
 }
-
-module.exports = { keepAlive };
