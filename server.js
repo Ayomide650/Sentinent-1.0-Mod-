@@ -47,28 +47,48 @@ export function keepAlive(client = null) {
   });
   
   // Self-ping every 14 minutes to prevent Render from sleeping the service
-  const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes in milliseconds
+  const PING_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
   
-  // Wait 2 minutes before starting pings to allow server to fully start
+  // Wait 3 minutes before starting pings to allow server to fully start
   setTimeout(() => {
     setInterval(async () => {
       try {
         // Get your Render app URL from environment or construct it
         const appUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-        const response = await fetch(`${appUrl}/health`);
+        
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(`${appUrl}/health`, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'KeepAlive-Bot/1.0'
+          }
+        });
+        
+        clearTimeout(timeoutId);
         
         if (response.ok) {
           const data = await response.json();
           console.log(`✅ Self-ping successful: ${response.status} at ${data.timestamp}`);
+        } else if (response.status === 503) {
+          console.log(`⚠️ Service temporarily unavailable (503) - likely still starting up`);
         } else {
           console.log(`⚠️ Self-ping returned: ${response.status}`);
         }
       } catch (error) {
-        console.log(`❌ Self-ping failed: ${error.message}`);
+        if (error.name === 'AbortError') {
+          console.log(`❌ Self-ping timed out after 30 seconds`);
+        } else {
+          console.log(`❌ Self-ping failed: ${error.message}`);
+        }
         
         // If external URL fails, try localhost as fallback
         try {
-          const response = await fetch(`http://localhost:${PORT}/health`);
+          const response = await fetch(`http://localhost:${PORT}/health`, {
+            headers: { 'User-Agent': 'KeepAlive-Bot/1.0' }
+          });
           if (response.ok) {
             console.log(`✅ Self-ping successful (localhost fallback): ${response.status}`);
           }
@@ -79,7 +99,7 @@ export function keepAlive(client = null) {
     }, PING_INTERVAL);
     
     console.log(`🔄 Self-ping scheduled every ${PING_INTERVAL / 60000} minutes`);
-  }, 2 * 60 * 1000); // 2 minute delay
+  }, 3 * 60 * 1000); // 3 minute delay
   
   return server;
 }
