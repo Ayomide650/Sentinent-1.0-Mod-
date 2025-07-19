@@ -46,11 +46,14 @@ async function handleSlashCommand(interaction) {
         ephemeral: true
       };
       
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(errorMessage);
-      } else {
+      // Check if interaction is still valid and not expired
+      if (!interaction.replied && !interaction.deferred) {
         await interaction.reply(errorMessage);
+      } else if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply(errorMessage);
       }
+      // If already replied, don't try to send another response
+      
     } catch (replyError) {
       console.error('Failed to send error message for command:', replyError);
     }
