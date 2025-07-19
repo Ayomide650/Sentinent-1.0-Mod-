@@ -12,7 +12,7 @@ module.exports = {
     async execute(interaction) {
         const client = interaction.client;
         
-        // Real uptime calculation
+        
         const uptime = client.uptime;
         const days = Math.floor(uptime / (24 * 60 * 60 * 1000));
         const hours = Math.floor((uptime % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
@@ -28,26 +28,26 @@ module.exports = {
 ╚═════╝  ╚═════╝    ╚═╝       ╚══════╝╚═╝     ╚═╝
 \`\`\``;
 
-        // Real memory usage
+        
         const memoryUsage = process.memoryUsage();
         const memoryUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024);
         const memoryTotal = Math.round(memoryUsage.heapTotal / 1024 / 1024);
         const memoryPercent = Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100);
         
-        // Real bot statistics
+        
         const serverCount = client.guilds.cache.size;
         const userCount = client.users.cache.size;
         
-        // Real ping
+        
         const pingMs = client.ws.ping;
         
-        // CPU usage (approximation based on memory and performance)
+        
         const cpuUsage = Math.min(Math.round((memoryPercent / 100) * 50) + random(5, 15), 95);
         
-        // Response time calculation
+        
         const responseTime = (Date.now() - interaction.createdTimestamp) / 1000;
         
-        // Health calculation based on ping and memory
+        
         let healthPercent = 100;
         if (pingMs > 100) healthPercent -= 10;
         if (memoryPercent > 80) healthPercent -= 15;
