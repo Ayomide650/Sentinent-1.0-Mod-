@@ -8,7 +8,7 @@
 // - Enhanced error recovery system
 // - Integrated XP and leveling system
 
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, ActivityType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -87,6 +87,9 @@ client.cooldowns = new Collection();
 
 // XP cooldown system (prevent spam)
 client.xpCooldowns = new Collection();
+
+// Track active interactions to prevent duplicates
+client.activeInteractions = new Set();
 
 // --- Leveling System Functions ---
 async function getUserLevel(guildId, userId) {
@@ -238,6 +241,7 @@ async function deployCommands() {
     
     const commands = [];
     const commandNames = new Set();
+    const duplicateNames = [];
     const commandsPath = path.join(__dirname, 'src/commands');
     
     console.log(`📁 Scanning directory: ${commandsPath}`);
@@ -269,6 +273,8 @@ async function deployCommands() {
       for (const file of commandFiles) {
         const filePath = path.join(folderPath, file);
         try {
+          // Clear require cache to prevent issues
+          delete require.cache[require.resolve(filePath)];
           const command = require(filePath);
           
           if ('data' in command && 'execute' in command) {
@@ -277,6 +283,7 @@ async function deployCommands() {
             // Check for duplicate command names
             if (commandNames.has(commandName)) {
               console.log(`⚠️  Duplicate command name found: ${commandName} in ${filePath}. Skipping...`);
+              duplicateNames.push({ name: commandName, file: `${folder}/${file}` });
               continue;
             }
             
@@ -293,12 +300,18 @@ async function deployCommands() {
       }
     }
     
+    if (duplicateNames.length > 0) {
+      console.log('\n⚠️  Duplicate commands found:');
+      duplicateNames.forEach(dup => console.log(`   - ${dup.name} in ${dup.file}`));
+    }
+    
     if (commands.length === 0) {
       console.log('⚠️  No commands found to register');
       return;
     }
     
-    console.log(`📊 Found ${commands.length} unique commands to register`);
+    console.log(`\n📊 Found ${commands.length} unique commands to register`);
+    console.log('Command names:', commands.map(cmd => cmd.name).join(', '));
     
     // Deploy commands to Discord
     const rest = new REST().setToken(process.env.DISCORD_TOKEN);
@@ -332,6 +345,12 @@ async function deployCommands() {
     
   } catch (error) {
     console.error('❌ Error deploying commands:', error);
+    
+    // Check if it's a duplicate name error
+    if (error.code === 50035 && error.message.includes('APPLICATION_COMMANDS_DUPLICATE_NAME')) {
+      console.error('🔍 This error is caused by duplicate command names. Check the logs above for duplicates.');
+    }
+    
     // Don't throw - allow bot to continue without commands if needed
   }
 }
@@ -405,8 +424,8 @@ client.once('ready', async () => {
   console.log(`🤖 Bot logged in as ${client.user.tag}`);
   console.log(`📊 Serving ${client.guilds.cache.size} guilds with ${client.users.cache.size} users`);
   
-  // Set bot status
-  client.user.setActivity('Managing your server', { type: 'WATCHING' });
+  // Set bot status (fixed ActivityType import)
+  client.user.setActivity('Managing your server', { type: ActivityType.Watching });
   
   try {
     // Initialize database
@@ -484,13 +503,41 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Handle interactions (slash commands)
+// Handle interactions (slash commands) - FIXED VERSION
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+  
+  const interactionId = interaction.id;
+  
+  // Check if this interaction is already being processed
+  if (client.activeInteractions.has(interactionId)) {
+    console.log(`⚠️ Interaction ${interactionId} already being processed, ignoring duplicate`);
+    return;
+  }
+  
+  // Mark interaction as active
+  client.activeInteractions.add(interactionId);
+  
+  // Auto-cleanup after 15 minutes (Discord's interaction timeout)
+  setTimeout(() => {
+    client.activeInteractions.delete(interactionId);
+  }, 15 * 60 * 1000);
   
   const command = client.commands.get(interaction.commandName);
   if (!command) {
     console.error(`❌ No command matching ${interaction.commandName} was found.`);
+    client.activeInteractions.delete(interactionId);
+    
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: '❌ This command is not available.',
+          ephemeral: true
+        });
+      }
+    } catch (error) {
+      console.error('Error sending unknown command message:', error.message);
+    }
     return;
   }
   
@@ -509,44 +556,88 @@ client.on('interactionCreate', async (interaction) => {
     const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
     if (now < expirationTime) {
       const expiredTimestamp = Math.round(expirationTime / 1000);
-      return interaction.reply({
-        content: `Please wait, you are on a cooldown for \`${command.data.name}\`. You can use it again <t:${expiredTimestamp}:R>.`,
-        ephemeral: true
-      });
+      client.activeInteractions.delete(interactionId);
+      
+      try {
+        if (!interaction.replied && !interaction.deferred) {
+          return await interaction.reply({
+            content: `Please wait, you are on a cooldown for \`${command.data.name}\`. You can use it again <t:${expiredTimestamp}:R>.`,
+            ephemeral: true
+          });
+        }
+      } catch (error) {
+        console.error('Error sending cooldown message:', error.message);
+      }
+      return;
     }
   }
   
   timestamps.set(interaction.user.id, now);
   setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
   
-  // Execute command
+  // Execute command with proper error handling
   try {
     await command.execute(interaction);
     console.log(`✅ ${interaction.user.tag} used /${command.data.name}`);
+    
   } catch (error) {
     console.error(`❌ Error executing ${command.data.name}:`, error);
     
-    const errorMessage = {
-      content: 'There was an error while executing this command!',
-      ephemeral: true
-    };
-    
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(errorMessage);
-    } else {
-      await interaction.reply(errorMessage);
+    // Only try to respond if we haven't already
+    try {
+      const errorMessage = {
+        content: 'There was an error while executing this command!',
+        ephemeral: true
+      };
+      
+      if (error.code === 10062) {
+        // Unknown interaction - interaction expired
+        console.log(`⚠️ Interaction expired for command ${command.data.name}`);
+      } else if (error.code === 40060) {
+        // Interaction already acknowledged
+        console.log(`⚠️ Interaction already acknowledged for command ${command.data.name}`);
+      } else {
+        // Try to send error message
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      }
+    } catch (replyError) {
+      console.error(`❌ Failed to send error message for command ${command.data.name}:`, replyError.message);
     }
+  } finally {
+    // Always cleanup the interaction tracking
+    client.activeInteractions.delete(interactionId);
   }
 });
 
-// --- Error Handling ---
+// --- Enhanced Error Handling ---
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('❌ Reason:', reason);
 });
 
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
-  process.exit(1);
+  // Don't exit immediately, try to cleanup first
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('🛑 Received SIGINT, shutting down gracefully...');
+  client.destroy();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  client.destroy();
+  process.exit(0);
 });
 
 // --- Start the bot ---
