@@ -21,29 +21,53 @@ module.exports = {
             });
         }
         
-        await interaction.reply('🔄 Syncing commands...');
+        await interaction.deferReply();
         
         try {
             const startTime = Date.now();
             
-            // Load all commands
+            // Load all commands from subfolders (matching your index.js structure)
             const commands = [];
-            const commandsPath = path.join(__dirname, '../commands'); // Adjust path as needed
-            const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+            const commandsPath = path.join(__dirname, '../'); // Go up to src/commands level
             
-            for (const file of commandFiles) {
-                const filePath = path.join(commandsPath, file);
-                const command = require(filePath);
-                if (command.data) {
-                    commands.push(command.data.toJSON());
+            // Check if commands directory exists
+            if (!fs.existsSync(commandsPath)) {
+                return await interaction.editReply('❌ Commands directory not found');
+            }
+            
+            const commandFolders = fs.readdirSync(commandsPath).filter(item => {
+                const folderPath = path.join(commandsPath, item);
+                return fs.statSync(folderPath).isDirectory();
+            });
+            
+            // Load commands from each subfolder
+            for (const folder of commandFolders) {
+                const folderPath = path.join(commandsPath, folder);
+                const commandFiles = fs.readdirSync(folderPath).filter(file => file.endsWith('.js'));
+                
+                for (const file of commandFiles) {
+                    const filePath = path.join(folderPath, file);
+                    try {
+                        delete require.cache[require.resolve(filePath)]; // Clear cache
+                        const command = require(filePath);
+                        if (command.data && command.execute) {
+                            commands.push(command.data.toJSON());
+                        }
+                    } catch (error) {
+                        console.error(`Error loading ${file}:`, error.message);
+                    }
                 }
+            }
+            
+            if (commands.length === 0) {
+                return await interaction.editReply('❌ No commands found to sync');
             }
             
             const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
             
             let globalResult, guildResults = { success: 0, failed: 0, failedGuilds: [] };
             
-            // Sync global commands (for user installs)
+            // Sync global commands first (for user installs)
             try {
                 await rest.put(
                     Routes.applicationCommands(interaction.client.user.id),
@@ -55,19 +79,30 @@ module.exports = {
                 globalResult = { success: false, error: error.message };
             }
             
-            // Sync guild commands
-            const guilds = interaction.client.guilds.cache;
-            for (const [guildId, guild] of guilds) {
+            // Update progress
+            await interaction.editReply('🔄 Syncing commands...\n✅ Global commands synced, updating guilds...');
+            
+            // Sync guild commands (limit to prevent timeout)
+            const guilds = Array.from(interaction.client.guilds.cache.values()).slice(0, 50); // Limit for timeout
+            let processed = 0;
+            
+            for (const guild of guilds) {
                 try {
                     await rest.put(
-                        Routes.applicationGuildCommands(interaction.client.user.id, guildId),
+                        Routes.applicationGuildCommands(interaction.client.user.id, guild.id),
                         { body: commands }
                     );
                     guildResults.success++;
                 } catch (error) {
                     guildResults.failed++;
-                    guildResults.failedGuilds.push(guildId);
-                    console.error(`Guild sync error for ${guild.name} (${guildId}):`, error.message);
+                    guildResults.failedGuilds.push(guild.id);
+                    console.error(`Guild sync error for ${guild.name}:`, error.message);
+                }
+                
+                processed++;
+                // Update progress every 10 guilds
+                if (processed % 10 === 0) {
+                    await interaction.editReply(`🔄 Syncing commands...\n✅ Global: Done\n📊 Guilds: ${processed}/${guilds.length} processed`);
                 }
             }
             
@@ -80,9 +115,8 @@ module.exports = {
             const messageCommands = commands.filter(cmd => cmd.type === 3).length;
             
             // Calculate rate limit usage (rough estimate)
-            const apiCalls = 1 + totalGuilds; // 1 global + guild calls
-            const rateLimitUsed = Math.min(apiCalls, 200);
-            const rateLimitRemaining = 200 - rateLimitUsed;
+            const apiCalls = 1 + totalGuilds;
+            const rateLimitRemaining = Math.max(200 - apiCalls, 0);
             
             const responseMessage = `✅ Commands synced successfully!
 ├─ Global (User Install): ${globalResult.success ? `${globalResult.count} commands registered` : '❌ Failed'}
