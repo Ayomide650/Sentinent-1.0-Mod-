@@ -21,14 +21,16 @@ module.exports = {
             });
         }
         
-        await interaction.deferReply();
+        // Defer reply immediately to prevent timeout
+        await interaction.deferReply({ ephemeral: true });
         
         try {
             const startTime = Date.now();
             
-            // Load all commands from subfolders (matching your index.js structure)
+            // Load all commands from subfolders
             const commands = [];
-            const commandsPath = path.join(__dirname, '../'); // Go up to src/commands level
+            const commandNames = new Set(); // Track duplicate names
+            const commandsPath = path.join(__dirname, '../');
             
             // Check if commands directory exists
             if (!fs.existsSync(commandsPath)) {
@@ -48,93 +50,141 @@ module.exports = {
                 for (const file of commandFiles) {
                     const filePath = path.join(folderPath, file);
                     try {
-                        delete require.cache[require.resolve(filePath)]; // Clear cache
+                        // Clear require cache to get fresh command data
+                        delete require.cache[require.resolve(filePath)];
                         const command = require(filePath);
+                        
                         if (command.data && command.execute) {
-                            commands.push(command.data.toJSON());
+                            const commandData = command.data.toJSON();
+                            const commandName = commandData.name;
+                            
+                            // Check for duplicate names
+                            if (commandNames.has(commandName)) {
+                                console.warn(`⚠️ Duplicate command name found: ${commandName} in ${file}`);
+                                continue; // Skip duplicate
+                            }
+                            
+                            commandNames.add(commandName);
+                            commands.push(commandData);
                         }
                     } catch (error) {
-                        console.error(`Error loading ${file}:`, error.message);
+                        console.error(`❌ Error loading ${file}:`, error.message);
                     }
                 }
             }
             
             if (commands.length === 0) {
-                return await interaction.editReply('❌ No commands found to sync');
+                return await interaction.editReply('❌ No valid commands found to sync');
             }
+            
+            // Log command names for debugging
+            console.log('Commands to sync:', commands.map(cmd => cmd.name).join(', '));
             
             const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
             
-            let globalResult, guildResults = { success: 0, failed: 0, failedGuilds: [] };
+            let results = {
+                global: { success: false, count: 0, error: null },
+                guilds: { success: 0, failed: 0, total: 0 }
+            };
             
-            // Sync global commands first (for user installs)
+            // Update progress
+            await interaction.editReply('🔄 Starting command sync...');
+            
             try {
+                // Sync global commands
                 await rest.put(
                     Routes.applicationCommands(interaction.client.user.id),
                     { body: commands }
                 );
-                globalResult = { success: true, count: commands.length };
+                results.global = { success: true, count: commands.length, error: null };
+                
+                await interaction.editReply('🔄 Global commands synced! Updating guild commands...');
+                
             } catch (error) {
                 console.error('Global sync error:', error);
-                globalResult = { success: false, error: error.message };
+                results.global.error = error.message;
+                
+                // Continue with guild sync even if global fails
+                await interaction.editReply('⚠️ Global sync failed, attempting guild sync...');
             }
             
-            // Update progress
-            await interaction.editReply('🔄 Syncing commands...\n✅ Global commands synced, updating guilds...');
-            
             // Sync guild commands (limit to prevent timeout)
-            const guilds = Array.from(interaction.client.guilds.cache.values()).slice(0, 50); // Limit for timeout
-            let processed = 0;
+            const guilds = Array.from(interaction.client.guilds.cache.values()).slice(0, 25);
+            results.guilds.total = guilds.length;
             
-            for (const guild of guilds) {
+            for (let i = 0; i < guilds.length; i++) {
+                const guild = guilds[i];
                 try {
                     await rest.put(
                         Routes.applicationGuildCommands(interaction.client.user.id, guild.id),
                         { body: commands }
                     );
-                    guildResults.success++;
+                    results.guilds.success++;
+                    
+                    // Update progress every 5 guilds
+                    if ((i + 1) % 5 === 0) {
+                        await interaction.editReply(
+                            `🔄 Syncing guild commands... ${i + 1}/${guilds.length} completed`
+                        );
+                    }
+                    
                 } catch (error) {
-                    guildResults.failed++;
-                    guildResults.failedGuilds.push(guild.id);
+                    results.guilds.failed++;
                     console.error(`Guild sync error for ${guild.name}:`, error.message);
                 }
                 
-                processed++;
-                // Update progress every 10 guilds
-                if (processed % 10 === 0) {
-                    await interaction.editReply(`🔄 Syncing commands...\n✅ Global: Done\n📊 Guilds: ${processed}/${guilds.length} processed`);
-                }
+                // Add small delay to prevent rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
             
+            // Calculate sync time
             const syncTime = ((Date.now() - startTime) / 1000).toFixed(1);
-            const totalGuilds = guildResults.success + guildResults.failed;
             
             // Count command types
-            const slashCommands = commands.filter(cmd => cmd.type === undefined || cmd.type === 1).length;
+            const slashCommands = commands.filter(cmd => !cmd.type || cmd.type === 1).length;
             const userCommands = commands.filter(cmd => cmd.type === 2).length;
             const messageCommands = commands.filter(cmd => cmd.type === 3).length;
             
-            // Calculate rate limit usage (rough estimate)
-            const apiCalls = 1 + totalGuilds;
-            const rateLimitRemaining = Math.max(200 - apiCalls, 0);
+            // Build response message
+            let responseMessage = `✅ Command sync completed!\n\n`;
             
-            const responseMessage = `✅ Commands synced successfully!
-├─ Global (User Install): ${globalResult.success ? `${globalResult.count} commands registered` : '❌ Failed'}
-├─ Guild Install: ${guildResults.success}/${totalGuilds} servers updated
-├─ Failed: ${guildResults.failed} servers ${guildResults.failed > 0 ? '(bot removed/no access)' : ''}
-└─ Total sync time: ${syncTime} seconds
-
-📊 Command Status:
-├─ Active commands: ${commands.length}
-├─ Slash commands: ${slashCommands}
-├─ User commands: ${userCommands}${messageCommands > 0 ? `\n├─ Message commands: ${messageCommands}` : ''}
-└─ Rate limit: ${rateLimitRemaining}/200 remaining today`;
+            // Global sync status
+            if (results.global.success) {
+                responseMessage += `🌐 **Global Commands**: ✅ ${results.global.count} commands registered\n`;
+            } else {
+                responseMessage += `🌐 **Global Commands**: ❌ Failed - ${results.global.error}\n`;
+            }
+            
+            // Guild sync status
+            responseMessage += `🏠 **Guild Commands**: ${results.guilds.success}/${results.guilds.total} servers updated\n`;
+            if (results.guilds.failed > 0) {
+                responseMessage += `   └─ ${results.guilds.failed} failed (likely due to permissions)\n`;
+            }
+            
+            responseMessage += `\n📊 **Command Breakdown**:\n`;
+            responseMessage += `   ├─ Total commands: ${commands.length}\n`;
+            responseMessage += `   ├─ Slash commands: ${slashCommands}\n`;
+            if (userCommands > 0) responseMessage += `   ├─ User commands: ${userCommands}\n`;
+            if (messageCommands > 0) responseMessage += `   ├─ Message commands: ${messageCommands}\n`;
+            responseMessage += `   └─ Sync time: ${syncTime}s`;
             
             await interaction.editReply(responseMessage);
             
         } catch (error) {
             console.error('Sync command error:', error);
-            await interaction.editReply('❌ An error occurred while syncing commands. Check console for details.');
+            
+            // Handle different error scenarios
+            try {
+                if (error.code === 10062) {
+                    // Interaction expired - log but don't try to respond
+                    console.error('Interaction expired during sync operation');
+                    return;
+                }
+                
+                await interaction.editReply('❌ An error occurred during sync. Check console for details.');
+            } catch (replyError) {
+                console.error('Failed to send error message:', replyError.message);
+            }
         }
     },
 };
